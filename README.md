@@ -188,6 +188,110 @@ The framework automatically detects non-interactive environments:
 - Appropriate exit codes
 - Works with piped input/output
 
+## Accessibility
+
+Ferment supports accessible mode for screen reader users and other assistive technologies.
+
+### Enabling Accessible Mode
+
+Set the `ACCESSIBLE` environment variable:
+
+```bash
+ACCESSIBLE=1 ./my-app
+```
+
+### What Changes in Accessible Mode
+
+- **Plain text output** - No ANSI escape codes or visual formatting
+- **Numbered options** - Selection components use numbers instead of arrow navigation
+- **Line-based input** - Standard stdin reading instead of raw terminal mode
+- **Clear prompts** - Screen reader-friendly text descriptions
+
+### Accessible Forms
+
+Use `Form::run_accessible()` for a fully accessible form experience:
+
+```rust
+use ferment::forms::{Form, Group, InputField, SelectField, ConfirmField};
+
+let mut form = Form::new()
+    .title("User Survey")
+    .group(
+        Group::new()
+            .field(InputField::new("name").title("Your name").build())
+            .field(SelectField::new("color").title("Favorite color")
+                .options(["Red", "Green", "Blue"]).build())
+            .field(ConfirmField::new("subscribe").title("Subscribe to newsletter?").build())
+    );
+
+// Run in accessible mode (line-based prompts)
+match form.run_accessible() {
+    Ok(Some(results)) => {
+        println!("Name: {}", results.get_string("name").unwrap_or(""));
+        println!("Color: {}", results.get_string("color").unwrap_or(""));
+        println!("Subscribe: {}", results.get_bool("subscribe").unwrap_or(false));
+    }
+    Ok(None) => println!("Form cancelled"),
+    Err(e) => eprintln!("Error: {}", e),
+}
+```
+
+### Example Accessible Session
+
+```
+=== User Survey ===
+
+Your name
+?
+> Alice
+
+Favorite color
+? Favorite color
+  1) Red
+  2) Green
+* 3) Blue
+Enter number (or q to cancel): 3
+
+Subscribe to newsletter?
+? Subscribe to newsletter? (y/N) y
+
+Form completed!
+```
+
+### Custom Accessible Components
+
+Components can implement the `Accessible` trait for custom accessible rendering:
+
+```rust
+use ferment::{Accessible, Model};
+
+impl Accessible for MyComponent {
+    type Message = MyMsg;
+
+    fn accessible_prompt(&self) -> String {
+        // Return plain text prompt
+        format!("? {}\n> ", self.title)
+    }
+
+    fn parse_accessible_input(&self, input: &str) -> Option<Self::Message> {
+        // Parse line input and return message
+        Some(MyMsg::SetValue(input.trim().to_string()))
+    }
+
+    fn is_accessible_complete(&self) -> bool {
+        self.submitted
+    }
+}
+```
+
+### Environment Variables
+
+| Variable          | Description                              |
+| ----------------- | ---------------------------------------- |
+| `ACCESSIBLE=1`    | Enable accessible mode                   |
+| `NO_COLOR=1`      | Disable colors (respected automatically) |
+| `REDUCE_MOTION=1` | Disable animations                       |
+
 ## License
 
 [Apache-2.0](LICENSE)
