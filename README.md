@@ -67,28 +67,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Components
 
-### Spinner
-
-```rust
-use ferment::components::{Spinner, SpinnerStyle};
-
-let spinner = Spinner::new()
-    .style(SpinnerStyle::Dots)
-    .message("Loading...");
-```
-
-### Progress Bar
-
-```rust
-use ferment::components::Progress;
-
-let progress = Progress::new()
-    .total(100)
-    .current(45)
-    .message("Downloading...");
-```
-
 ### Text Input
+
+Single-line text input with cursor support, placeholder text, and optional password masking.
 
 ```rust
 use ferment::components::TextInput;
@@ -98,36 +79,9 @@ let input = TextInput::new()
     .prompt("> ");
 ```
 
-### Select
-
-```rust
-use ferment::components::Select;
-
-let select = Select::new("Choose a color")
-    .options(vec!["Red", "Green", "Blue"]);
-```
-
-### Confirm
-
-```rust
-use ferment::components::Confirm;
-
-let confirm = Confirm::new("Are you sure?")
-    .default(false);
-```
-
-### MultiSelect
-
-```rust
-use ferment::components::MultiSelect;
-
-let select = MultiSelect::new("Choose colors")
-    .options(vec!["Red", "Green", "Blue"])
-    .min(1)
-    .max(2);
-```
-
 ### Text Area
+
+Multi-line text editor with cursor navigation, scrolling, and line editing.
 
 ```rust
 use ferment::components::TextArea;
@@ -138,16 +92,46 @@ let textarea = TextArea::new()
     .width(60);
 ```
 
-### Viewport
+### Selection Components
+
+#### Select
+
+Single-choice selection from a list of options.
 
 ```rust
-use ferment::components::Viewport;
+use ferment::components::Select;
 
-let viewport = Viewport::new(80, 20)
-    .content("Long scrollable content here...");
+let select = Select::new("Choose a color")
+    .options(vec!["Red", "Green", "Blue"]);
 ```
 
-### List
+#### MultiSelect
+
+Multiple-choice selection with checkboxes and optional min/max constraints.
+
+```rust
+use ferment::components::MultiSelect;
+
+let select = MultiSelect::new("Choose colors")
+    .options(vec!["Red", "Green", "Blue"])
+    .min(1)
+    .max(2);
+```
+
+#### Confirm
+
+Yes/No confirmation prompt with customizable default.
+
+```rust
+use ferment::components::Confirm;
+
+let confirm = Confirm::new("Are you sure?")
+    .default(false);
+```
+
+#### List
+
+Filterable, paginated list with keyboard navigation and search.
 
 ```rust
 use ferment::components::List;
@@ -158,7 +142,62 @@ let list = List::new("Select a file")
     .filterable(true);
 ```
 
-### Table
+### Progress Indicators
+
+#### Spinner
+
+Animated loading indicator for indeterminate operations.
+
+```rust
+use ferment::components::{Spinner, SpinnerStyle};
+
+let spinner = Spinner::new()
+    .style(SpinnerStyle::Dots)
+    .message("Loading...");
+```
+
+#### Progress
+
+Progress bar for operations with known completion percentage.
+
+```rust
+use ferment::components::Progress;
+
+let progress = Progress::new()
+    .total(100)
+    .current(45)
+    .message("Downloading...");
+```
+
+#### MultiProgress
+
+Parallel progress bars for tracking multiple concurrent tasks.
+
+```rust
+use ferment::components::MultiProgress;
+
+let mp = MultiProgress::new()
+    .add_task("download", "Downloading files...", 100)
+    .add_task("compile", "Compiling...", 50)
+    .add_task("test", "Running tests...", 200);
+```
+
+### Display Components
+
+#### Viewport
+
+Scrollable container for long content with keyboard navigation.
+
+```rust
+use ferment::components::Viewport;
+
+let viewport = Viewport::new(80, 20)
+    .content("Long scrollable content here...");
+```
+
+#### Table
+
+Data table with columns, alignment options, and row selection.
 
 ```rust
 use ferment::components::{Table, Column};
@@ -174,17 +213,6 @@ let table = Table::new()
         vec!["Bob", "25", "Los Angeles"],
     ])
     .height(10);
-```
-
-### MultiProgress
-
-```rust
-use ferment::components::MultiProgress;
-
-let mp = MultiProgress::new()
-    .add_task("download", "Downloading files...", 100)
-    .add_task("compile", "Compiling...", 50)
-    .add_task("test", "Running tests...", 200);
 ```
 
 ## Forms
