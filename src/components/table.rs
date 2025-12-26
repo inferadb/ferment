@@ -560,15 +560,15 @@ impl Model for Table {
 
                 // Determine row color
                 let row_color = if is_selected_row {
-                    self.selected_row_color
-                } else if let Some(alt) = self.alt_row_color {
+                    self.selected_row_color.clone()
+                } else if let Some(ref alt) = self.alt_row_color {
                     if row_idx % 2 == 1 {
-                        alt
+                        alt.clone()
                     } else {
-                        self.row_color
+                        self.row_color.clone()
                     }
                 } else {
-                    self.row_color
+                    self.row_color.clone()
                 };
 
                 if self.show_borders {
@@ -583,9 +583,9 @@ impl Model for Table {
                         self.cell_selection && is_selected_row && col_idx == self.cursor_col;
 
                     let cell_color = if is_selected_cell {
-                        self.selected_cell_color
+                        &self.selected_cell_color
                     } else {
-                        row_color
+                        &row_color
                     };
 
                     if is_selected_row {

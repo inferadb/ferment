@@ -364,9 +364,9 @@ impl MultiProgress {
         let empty = self.empty_char.to_string().repeat(empty_count);
 
         let bar_color = match &task.status {
-            TaskStatus::InProgress => self.in_progress_color,
-            TaskStatus::Completed => self.completed_color,
-            TaskStatus::Failed(_) => self.failed_color,
+            TaskStatus::InProgress => self.in_progress_color.clone(),
+            TaskStatus::Completed => self.completed_color.clone(),
+            TaskStatus::Failed(_) => self.failed_color.clone(),
         };
 
         format!(
