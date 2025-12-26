@@ -161,22 +161,28 @@ The framework follows The Elm Architecture:
 4. **View** - Pure function that renders state as a string
 5. **Commands** - Side effects (timers, async operations)
 
-```
-┌─────────────────────────────────────────┐
-│              Runtime Loop               │
-└─────────────────────────────────────────┘
-                    │
-    ┌───────────────┼───────────────┐
-    ▼               ▼               ▼
-┌─────────┐   ┌──────────┐   ┌─────────┐
-│  Model  │──▶│   View   │   │  Update │
-│ (State) │   │ (Render) │   │ (Logic) │
-└─────────┘   └──────────┘   └─────────┘
-    ▲               │               │
-    │        returns String         │
-    │               │               │
-    └───────────────┴───────────────┘
-           New Model + Cmd
+```mermaid
+flowchart TD
+    subgraph Runtime["Runtime Loop"]
+        direction LR
+        Model["Model<br/>(State)"]
+        View["View<br/>(Render)"]
+        Update["Update<br/>(Logic)"]
+    end
+
+    Model --> View
+    View -->|"returns String"| Terminal["Terminal Output"]
+    Events["User Events"] --> Update
+    Update -->|"New Model + Cmd"| Model
+
+    subgraph Commands["Commands (Effects)"]
+        Tick["Tick timers"]
+        Async["Async I/O"]
+        Quit["Quit signal"]
+    end
+
+    Update --> Commands
+    Commands --> Update
 ```
 
 ## CI/Script Compatibility
