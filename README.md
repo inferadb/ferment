@@ -116,6 +116,77 @@ let confirm = Confirm::new("Are you sure?")
     .default(false);
 ```
 
+### MultiSelect
+
+```rust
+use ferment::components::MultiSelect;
+
+let select = MultiSelect::new("Choose colors")
+    .options(vec!["Red", "Green", "Blue"])
+    .min(1)
+    .max(2);
+```
+
+### Text Area
+
+```rust
+use ferment::components::TextArea;
+
+let textarea = TextArea::new()
+    .placeholder("Enter your message...")
+    .height(10)
+    .width(60);
+```
+
+### Viewport
+
+```rust
+use ferment::components::Viewport;
+
+let viewport = Viewport::new(80, 20)
+    .content("Long scrollable content here...");
+```
+
+### List
+
+```rust
+use ferment::components::List;
+
+let list = List::new("Select a file")
+    .items(vec!["main.rs", "lib.rs", "Cargo.toml"])
+    .height(10)
+    .filterable(true);
+```
+
+### Table
+
+```rust
+use ferment::components::{Table, Column};
+
+let table = Table::new()
+    .columns(vec![
+        Column::new("Name").width(20),
+        Column::new("Age").width(5),
+        Column::new("City").width(15),
+    ])
+    .rows(vec![
+        vec!["Alice", "30", "New York"],
+        vec!["Bob", "25", "Los Angeles"],
+    ])
+    .height(10);
+```
+
+### MultiProgress
+
+```rust
+use ferment::components::MultiProgress;
+
+let mp = MultiProgress::new()
+    .add_task("download", "Downloading files...", 100)
+    .add_task("compile", "Compiling...", 50)
+    .add_task("test", "Running tests...", 200);
+```
+
 ## Forms
 
 Build multi-step forms with validation:
