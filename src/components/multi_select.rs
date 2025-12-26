@@ -11,6 +11,7 @@
 //!     .options(vec!["Red", "Green", "Blue"]);
 //! ```
 
+use crate::runtime::accessible::{Accessible, AccessibleInput};
 use crate::runtime::{Cmd, Model};
 use crate::style::Color;
 use crate::terminal::{Event, KeyCode};
@@ -327,6 +328,108 @@ impl<T: Clone + Send + 'static> Model for MultiSelect<T> {
     }
 }
 
+impl<T: Clone + Send + 'static> Accessible for MultiSelect<T> {
+    type Message = MultiSelectMsg;
+
+    fn accessible_prompt(&self) -> String {
+        let mut prompt = String::new();
+
+        // Title with selection count
+        if !self.title.is_empty() {
+            prompt.push_str(&format!(
+                "? {} ({} selected)\n",
+                self.title,
+                self.selected_count()
+            ));
+        }
+
+        // Numbered options with check marks
+        for (i, (_, label, checked)) in self.options.iter().enumerate() {
+            let check = if *checked { "[x]" } else { "[ ]" };
+            prompt.push_str(&format!("{} {}) {}\n", check, i + 1, label));
+        }
+
+        // Instructions
+        prompt.push_str(
+            "Enter numbers to toggle (comma-separated), 'done' to submit, or 'q' to cancel: ",
+        );
+
+        // Validation hint
+        if let Some(min) = self.min_selections {
+            if self.selected_count() < min {
+                prompt.push_str(&format!("\n(Select at least {})", min));
+            }
+        }
+
+        prompt
+    }
+
+    fn parse_accessible_input(&self, input: &str) -> Option<Self::Message> {
+        let trimmed = input.trim().to_lowercase();
+
+        if trimmed == "done" || trimmed == "d" {
+            return Some(MultiSelectMsg::Submit);
+        }
+
+        match AccessibleInput::parse_multi_selection(input, self.options.len()) {
+            AccessibleInput::Cancel => Some(MultiSelectMsg::Cancel),
+            _ => None, // Handled by apply_accessible_input
+        }
+    }
+
+    fn is_accessible_complete(&self) -> bool {
+        self.submitted || self.cancelled
+    }
+}
+
+// Extended accessible support for MultiSelect
+impl<T: Clone + Send + 'static> MultiSelect<T> {
+    /// Toggle selection at a specific index (0-based).
+    pub fn toggle_at(&mut self, index: usize) {
+        if index < self.options.len() {
+            let can_select = self.can_select_more();
+            if let Some((_, _, selected)) = self.options.get_mut(index) {
+                if *selected {
+                    *selected = false;
+                } else if can_select {
+                    *selected = true;
+                }
+            }
+        }
+    }
+
+    /// Parse accessible input and apply it.
+    ///
+    /// Returns true if input was valid and processed.
+    pub fn apply_accessible_input(&mut self, input: &str) -> bool {
+        let trimmed = input.trim().to_lowercase();
+
+        if trimmed == "done" || trimmed == "d" {
+            if self.meets_minimum() {
+                self.submitted = true;
+                return true;
+            }
+            return false; // Can't submit yet, need more selections
+        }
+
+        if trimmed == "q" || trimmed == "quit" || trimmed == "cancel" {
+            self.cancelled = true;
+            return true;
+        }
+
+        match AccessibleInput::parse_multi_selection(input, self.options.len()) {
+            AccessibleInput::MultiSelection(selections) => {
+                // Toggle each selected number
+                for n in selections {
+                    self.toggle_at(n - 1); // Convert 1-based to 0-based
+                }
+                false // Not complete, allow more input
+            }
+            _ => false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -363,5 +466,35 @@ mod tests {
         select.move_down();
         select.toggle(); // Should not toggle, at max
         assert_eq!(select.selected_count(), 2);
+    }
+
+    #[test]
+    fn test_accessible_prompt() {
+        let select: MultiSelect<String> =
+            MultiSelect::new("Choose colors").options(vec!["Red", "Green", "Blue"]);
+        let prompt = select.accessible_prompt();
+        assert!(prompt.contains("Choose colors"));
+        assert!(prompt.contains("1) Red"));
+        assert!(prompt.contains("2) Green"));
+        assert!(prompt.contains("3) Blue"));
+        assert!(prompt.contains("[ ]")); // Unchecked
+    }
+
+    #[test]
+    fn test_accessible_apply_input() {
+        let mut select: MultiSelect<String> =
+            MultiSelect::new("Choose").options(vec!["A", "B", "C"]);
+
+        // Toggle first item
+        assert!(!select.apply_accessible_input("1"));
+        assert_eq!(select.selected_count(), 1);
+
+        // Toggle multiple
+        assert!(!select.apply_accessible_input("2, 3"));
+        assert_eq!(select.selected_count(), 3);
+
+        // Submit
+        assert!(select.apply_accessible_input("done"));
+        assert!(select.is_submitted());
     }
 }

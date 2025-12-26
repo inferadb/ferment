@@ -11,6 +11,7 @@
 //!     .options(vec!["Red", "Green", "Blue"]);
 //! ```
 
+use crate::runtime::accessible::{Accessible, AccessibleInput};
 use crate::runtime::{Cmd, Model};
 use crate::style::Color;
 use crate::terminal::{Event, KeyCode};
@@ -238,6 +239,73 @@ impl<T: Clone + Send + 'static> Model for Select<T> {
     }
 }
 
+impl<T: Clone + Send + 'static> Accessible for Select<T> {
+    type Message = SelectMsg;
+
+    fn accessible_prompt(&self) -> String {
+        let mut prompt = String::new();
+
+        // Title
+        if !self.title.is_empty() {
+            prompt.push_str(&format!("? {}\n", self.title));
+        }
+
+        // Numbered options
+        for (i, (_, label)) in self.options.iter().enumerate() {
+            let marker = if i == self.cursor { "*" } else { " " };
+            prompt.push_str(&format!("{} {}) {}\n", marker, i + 1, label));
+        }
+
+        prompt.push_str("Enter number (or q to cancel): ");
+        prompt
+    }
+
+    fn parse_accessible_input(&self, input: &str) -> Option<Self::Message> {
+        match AccessibleInput::parse_selection(input, self.options.len()) {
+            AccessibleInput::Selection(_) => {
+                // Selection is handled by apply_accessible_input which updates cursor
+                Some(SelectMsg::Submit)
+            }
+            AccessibleInput::Cancel => Some(SelectMsg::Cancel),
+            AccessibleInput::Empty => None,
+            _ => None,
+        }
+    }
+
+    fn is_accessible_complete(&self) -> bool {
+        self.submitted || self.cancelled
+    }
+}
+
+// Extended accessible support for Select
+impl<T: Clone + Send + 'static> Select<T> {
+    /// Set the cursor position directly (for accessible mode).
+    pub fn set_cursor(&mut self, index: usize) {
+        if index < self.options.len() {
+            self.cursor = index;
+        }
+    }
+
+    /// Parse accessible input and apply it.
+    ///
+    /// Returns true if the selection is complete.
+    pub fn apply_accessible_input(&mut self, input: &str) -> bool {
+        match AccessibleInput::parse_selection(input, self.options.len()) {
+            AccessibleInput::Selection(n) => {
+                self.cursor = n - 1; // Convert 1-based to 0-based
+                self.submitted = true;
+                true
+            }
+            AccessibleInput::Cancel => {
+                self.cancelled = true;
+                true
+            }
+            AccessibleInput::Empty => false,
+            _ => false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -270,5 +338,31 @@ mod tests {
         assert!(select.selected().is_none());
         select.submitted = true;
         assert_eq!(select.selected(), Some(&"B".to_string()));
+    }
+
+    #[test]
+    fn test_accessible_prompt() {
+        let select: Select<String> =
+            Select::new("Choose a color").options(vec!["Red", "Green", "Blue"]);
+        let prompt = select.accessible_prompt();
+        assert!(prompt.contains("Choose a color"));
+        assert!(prompt.contains("1) Red"));
+        assert!(prompt.contains("2) Green"));
+        assert!(prompt.contains("3) Blue"));
+    }
+
+    #[test]
+    fn test_accessible_apply_input() {
+        let mut select: Select<String> = Select::new("Choose").options(vec!["A", "B", "C"]);
+        assert!(select.apply_accessible_input("2"));
+        assert!(select.is_submitted());
+        assert_eq!(select.selected(), Some(&"B".to_string()));
+    }
+
+    #[test]
+    fn test_accessible_cancel() {
+        let mut select: Select<String> = Select::new("Choose").options(vec!["A", "B", "C"]);
+        assert!(select.apply_accessible_input("q"));
+        assert!(select.is_cancelled());
     }
 }

@@ -13,6 +13,7 @@
 //!     .width(60);
 //! ```
 
+use crate::runtime::accessible::Accessible;
 use crate::runtime::{Cmd, Model};
 use crate::style::Color;
 use crate::terminal::{Event, KeyCode, KeyModifiers};
@@ -704,6 +705,94 @@ impl Model for TextArea {
     }
 }
 
+impl Accessible for TextArea {
+    type Message = TextAreaMsg;
+
+    fn accessible_prompt(&self) -> String {
+        let mut prompt = String::new();
+
+        // Placeholder/title
+        if !self.placeholder.is_empty() {
+            prompt.push_str(&format!(
+                "? {} (multi-line, enter blank line to finish)\n",
+                self.placeholder
+            ));
+        } else {
+            prompt.push_str("? Enter text (multi-line, enter blank line to finish)\n");
+        }
+
+        // Show current content if any
+        if !self.is_empty() {
+            prompt.push_str("Current content:\n");
+            for (i, line) in self.lines.iter().enumerate() {
+                prompt.push_str(&format!("  {}: {}\n", i + 1, line));
+            }
+            prompt.push('\n');
+        }
+
+        prompt.push_str("> ");
+        prompt
+    }
+
+    fn parse_accessible_input(&self, input: &str) -> Option<Self::Message> {
+        let trimmed = input.trim();
+
+        // Empty line signals end of input
+        if trimmed.is_empty() {
+            return Some(TextAreaMsg::Submit);
+        }
+
+        // Append the line
+        Some(TextAreaMsg::Paste(input.trim_end_matches('\n').to_string()))
+    }
+
+    fn is_accessible_complete(&self) -> bool {
+        self.submitted || self.cancelled
+    }
+}
+
+impl TextArea {
+    /// Apply accessible input line by line.
+    ///
+    /// In accessible mode, users enter text line by line.
+    /// An empty line signals the end of input.
+    ///
+    /// Returns true if input is complete (empty line received).
+    pub fn apply_accessible_input(&mut self, input: &str) -> bool {
+        let trimmed = input.trim();
+
+        // Empty line signals end of input
+        if trimmed.is_empty() {
+            self.submitted = true;
+            return true;
+        }
+
+        // Add the line to content
+        let content = input.trim_end_matches('\n').to_string();
+
+        // If we have content on the last line, add a newline first
+        if !self.lines.is_empty() && !self.current_line().is_empty() {
+            self.insert_newline();
+        }
+
+        // Insert the content
+        for c in content.chars() {
+            if c == '\n' {
+                self.insert_newline();
+            } else {
+                self.insert_char(c);
+            }
+        }
+
+        false // Not complete, allow more input
+    }
+
+    /// Check if the text area is empty.
+    fn is_empty(&self) -> bool {
+        self.lines.len() == 1 && self.lines[0].is_empty()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -833,5 +922,36 @@ mod tests {
 
         assert_eq!(textarea.line_count(), 2);
         assert_eq!(textarea.get_value(), "a\nbc");
+    }
+
+    #[test]
+    fn test_accessible_prompt() {
+        let textarea = TextArea::new().placeholder("Enter description");
+        let prompt = textarea.accessible_prompt();
+        assert!(prompt.contains("Enter description"));
+        assert!(prompt.contains("multi-line"));
+        assert!(prompt.contains("> "));
+    }
+
+    #[test]
+    fn test_accessible_apply_input() {
+        let mut textarea = TextArea::new();
+
+        // Add first line
+        assert!(!textarea.apply_accessible_input("First line"));
+        assert!(!textarea.is_submitted());
+
+        // Add second line
+        assert!(!textarea.apply_accessible_input("Second line"));
+        assert!(!textarea.is_submitted());
+
+        // Empty line to finish
+        assert!(textarea.apply_accessible_input(""));
+        assert!(textarea.is_submitted());
+
+        // Verify content
+        let value = textarea.get_value();
+        assert!(value.contains("First line"));
+        assert!(value.contains("Second line"));
     }
 }

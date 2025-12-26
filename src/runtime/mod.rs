@@ -5,12 +5,15 @@
 //! - [`Cmd`] - Commands for side effects
 //! - [`Sub`] - Subscriptions for recurring events
 //! - [`Program`] - The runtime that manages the event loop
+//! - [`Accessible`] - Trait for accessible mode support
 
+pub mod accessible;
 mod command;
 mod message;
 mod program;
 mod subscription;
 
+pub use accessible::{Accessible, AccessibleInput};
 pub use command::Cmd;
 pub use message::CommonMsg;
 pub use program::{Program, ProgramOptions};

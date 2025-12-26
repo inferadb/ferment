@@ -384,10 +384,34 @@ impl<M: Model> Program<M> {
     }
 
     /// Run in non-interactive mode (CI, piped input).
+    ///
+    /// In non-interactive mode, the program displays the initial view
+    /// and returns immediately. This is appropriate for:
+    /// - CI environments
+    /// - Piped input/output
+    /// - Scripts
+    ///
+    /// For accessible mode with screen readers, use `Form::run_accessible()`
+    /// or implement custom accessible handling using the `Accessible` trait.
     fn run_non_interactive(self) -> io::Result<M> {
-        // In non-interactive mode, just display the initial view
+        use super::accessible::strip_ansi;
+
+        // In non-interactive mode, display a stripped view (no ANSI codes)
+        // This ensures clean output for CI/scripts
         let view = self.model.view();
-        println!("{}", view);
+        let clean_view = if self.options.accessible {
+            strip_ansi(&view)
+        } else {
+            view
+        };
+        println!("{}", clean_view);
+
+        // Note: For interactive accessible mode, use Form::run_accessible()
+        // or implement custom handling with the Accessible trait
+        if self.options.accessible {
+            eprintln!("Note: For interactive accessible mode, use Form::run_accessible()");
+        }
+
         Ok(self.model)
     }
 

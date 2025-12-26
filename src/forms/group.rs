@@ -1,6 +1,7 @@
 //! Form groups (pages).
 
 use super::field::{Field, FieldMsg};
+use crate::runtime::accessible::Accessible;
 use crate::runtime::{Cmd, Model};
 use crate::terminal::Event;
 
@@ -248,6 +249,77 @@ impl Model for Group {
             field.handle_event(event).map(|m| GroupMsg::Field(idx, m))
         } else {
             None
+        }
+    }
+}
+
+impl Accessible for Group {
+    type Message = GroupMsg;
+
+    fn accessible_prompt(&self) -> String {
+        let mut prompt = String::new();
+
+        // Group title
+        if let Some(title) = &self.title {
+            prompt.push_str(&format!("{}\n", title));
+        }
+
+        // Group description
+        if let Some(desc) = &self.description {
+            prompt.push_str(&format!("{}\n", desc));
+        }
+
+        if self.title.is_some() || self.description.is_some() {
+            prompt.push('\n');
+        }
+
+        // Current field prompt
+        if let Some(field) = self.fields.get(self.current_field) {
+            prompt.push_str(&field.accessible_prompt());
+        }
+
+        // Progress indicator
+        let total = self.fields.len();
+        if total > 1 {
+            prompt.push_str(&format!("(Field {}/{})\n", self.current_field + 1, total));
+        }
+
+        prompt
+    }
+
+    fn parse_accessible_input(&self, input: &str) -> Option<Self::Message> {
+        if let Some(field) = self.fields.get(self.current_field) {
+            let idx = self.current_field;
+            field
+                .parse_accessible_input(input)
+                .map(|m| GroupMsg::Field(idx, m))
+        } else {
+            None
+        }
+    }
+
+    fn is_accessible_complete(&self) -> bool {
+        self.is_complete() || self.is_cancelled()
+    }
+}
+
+impl Group {
+    /// Apply accessible input to the current field.
+    ///
+    /// Returns true if the current field is complete.
+    pub fn apply_accessible_input(&mut self, input: &str) -> bool {
+        if let Some(field) = self.fields.get_mut(self.current_field) {
+            let complete = field.apply_accessible_input(input);
+
+            if complete && !self.is_last_field() {
+                // Auto-advance to next field
+                self.next_field();
+                false // More fields to go
+            } else {
+                complete
+            }
+        } else {
+            false
         }
     }
 }

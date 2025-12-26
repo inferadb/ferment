@@ -2,6 +2,7 @@
 
 use super::validation::Validator;
 use crate::components::{Confirm, MultiSelect, Select, TextInput};
+use crate::runtime::accessible::Accessible;
 use crate::runtime::{Cmd, Model};
 use crate::terminal::Event;
 
@@ -224,6 +225,80 @@ impl Model for Field {
                 select.handle_event(event).map(FieldMsg::MultiSelect)
             }
             FieldInner::Confirm(confirm) => confirm.handle_event(event).map(FieldMsg::Confirm),
+        }
+    }
+}
+
+impl Accessible for Field {
+    type Message = FieldMsg;
+
+    fn accessible_prompt(&self) -> String {
+        let mut prompt = String::new();
+
+        // Title
+        if !self.title.is_empty() {
+            prompt.push_str(&self.title);
+            if self.required {
+                prompt.push_str(" *");
+            }
+            prompt.push('\n');
+        }
+
+        // Description
+        if let Some(desc) = &self.description {
+            prompt.push_str(desc);
+            prompt.push('\n');
+        }
+
+        // Delegate to inner component
+        match &self.inner {
+            FieldInner::Input(input) => prompt.push_str(&input.accessible_prompt()),
+            FieldInner::Select(select) => prompt.push_str(&select.accessible_prompt()),
+            FieldInner::MultiSelect(select) => prompt.push_str(&select.accessible_prompt()),
+            FieldInner::Confirm(confirm) => prompt.push_str(&confirm.accessible_prompt()),
+        }
+
+        prompt
+    }
+
+    fn parse_accessible_input(&self, input: &str) -> Option<Self::Message> {
+        match &self.inner {
+            FieldInner::Input(inner) => inner.parse_accessible_input(input).map(FieldMsg::Input),
+            FieldInner::Select(inner) => inner.parse_accessible_input(input).map(FieldMsg::Select),
+            FieldInner::MultiSelect(inner) => inner
+                .parse_accessible_input(input)
+                .map(FieldMsg::MultiSelect),
+            FieldInner::Confirm(inner) => {
+                inner.parse_accessible_input(input).map(FieldMsg::Confirm)
+            }
+        }
+    }
+
+    fn is_accessible_complete(&self) -> bool {
+        self.is_submitted() || self.is_cancelled()
+    }
+}
+
+impl Field {
+    /// Apply accessible input to this field.
+    ///
+    /// Returns true if the field is complete.
+    pub fn apply_accessible_input(&mut self, input: &str) -> bool {
+        match &mut self.inner {
+            FieldInner::Input(inner) => {
+                // For text input, set value and submit
+                let trimmed = input.trim();
+                if !trimmed.is_empty() {
+                    inner.update(crate::components::text_input::TextInputMsg::SetValue(
+                        trimmed.to_string(),
+                    ));
+                }
+                inner.update(crate::components::text_input::TextInputMsg::Submit);
+                true
+            }
+            FieldInner::Select(inner) => inner.apply_accessible_input(input),
+            FieldInner::MultiSelect(inner) => inner.apply_accessible_input(input),
+            FieldInner::Confirm(inner) => inner.apply_accessible_input(input),
         }
     }
 }

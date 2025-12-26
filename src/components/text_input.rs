@@ -12,6 +12,7 @@
 //!     .prompt("> ");
 //! ```
 
+use crate::runtime::accessible::{Accessible, AccessibleInput};
 use crate::runtime::{Cmd, Model};
 use crate::style::Color;
 use crate::terminal::{Event, KeyCode, KeyModifiers};
@@ -394,6 +395,52 @@ impl Model for TextInput {
     }
 }
 
+impl Accessible for TextInput {
+    type Message = TextInputMsg;
+
+    fn accessible_prompt(&self) -> String {
+        let mut prompt = String::new();
+
+        // Show placeholder as hint if value is empty
+        if self.value.is_empty() && !self.placeholder.is_empty() {
+            prompt.push_str(&format!(
+                "? {} ({})\n",
+                self.prompt.trim(),
+                self.placeholder
+            ));
+        } else if !self.prompt.is_empty() {
+            prompt.push_str(&format!("? {}\n", self.prompt.trim()));
+        }
+
+        // Show current value if any
+        if !self.value.is_empty() {
+            if self.hidden {
+                prompt.push_str(&format!("Current: {}\n", "*".repeat(self.value.len())));
+            } else {
+                prompt.push_str(&format!("Current: {}\n", self.value));
+            }
+        }
+
+        prompt.push_str("> ");
+        prompt
+    }
+
+    fn parse_accessible_input(&self, input: &str) -> Option<Self::Message> {
+        match AccessibleInput::parse_text(input) {
+            AccessibleInput::Text(text) => Some(TextInputMsg::SetValue(text)),
+            AccessibleInput::Empty => {
+                // Keep current value and submit
+                Some(TextInputMsg::Submit)
+            }
+            _ => None,
+        }
+    }
+
+    fn is_accessible_complete(&self) -> bool {
+        self.submitted
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -434,5 +481,24 @@ mod tests {
         input.cursor_start();
         input.delete_forward();
         assert_eq!(input.get_value(), "ell");
+    }
+
+    #[test]
+    fn test_accessible_prompt() {
+        let input = TextInput::new().prompt("Name").placeholder("Enter name");
+        let prompt = input.accessible_prompt();
+        assert!(prompt.contains("Name"));
+        assert!(prompt.contains("Enter name"));
+        assert!(prompt.contains("> "));
+    }
+
+    #[test]
+    fn test_accessible_parse_input() {
+        let input = TextInput::new();
+        let msg = input.parse_accessible_input("hello");
+        assert!(matches!(msg, Some(TextInputMsg::SetValue(s)) if s == "hello"));
+
+        let msg = input.parse_accessible_input("");
+        assert!(matches!(msg, Some(TextInputMsg::Submit)));
     }
 }

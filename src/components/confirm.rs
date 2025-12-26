@@ -11,6 +11,7 @@
 //!     .default(false);
 //! ```
 
+use crate::runtime::accessible::{Accessible, AccessibleInput};
 use crate::runtime::{Cmd, Model};
 use crate::style::Color;
 use crate::terminal::{Event, KeyCode};
@@ -203,6 +204,60 @@ impl Model for Confirm {
     }
 }
 
+impl Accessible for Confirm {
+    type Message = ConfirmMsg;
+
+    fn accessible_prompt(&self) -> String {
+        let default_hint = if self.default { "Y/n" } else { "y/N" };
+        format!("? {} ({}) ", self.title, default_hint)
+    }
+
+    fn parse_accessible_input(&self, input: &str) -> Option<Self::Message> {
+        match AccessibleInput::parse_confirm(input, Some(self.default)) {
+            AccessibleInput::Yes => Some(ConfirmMsg::Submit),
+            AccessibleInput::No => Some(ConfirmMsg::Submit),
+            AccessibleInput::Cancel => Some(ConfirmMsg::Cancel),
+            AccessibleInput::Empty => Some(ConfirmMsg::Submit), // Use default
+            _ => None,
+        }
+    }
+
+    fn is_accessible_complete(&self) -> bool {
+        self.submitted || self.cancelled
+    }
+}
+
+impl Confirm {
+    /// Parse accessible input and apply it.
+    ///
+    /// Returns true if the confirmation is complete.
+    pub fn apply_accessible_input(&mut self, input: &str) -> bool {
+        match AccessibleInput::parse_confirm(input, Some(self.default)) {
+            AccessibleInput::Yes => {
+                self.value = true;
+                self.submitted = true;
+                true
+            }
+            AccessibleInput::No => {
+                self.value = false;
+                self.submitted = true;
+                true
+            }
+            AccessibleInput::Cancel => {
+                self.cancelled = true;
+                true
+            }
+            AccessibleInput::Empty => {
+                // Use default value
+                self.value = self.default;
+                self.submitted = true;
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -227,5 +282,35 @@ mod tests {
         assert!(confirm.confirmed().is_none());
         confirm.submitted = true;
         assert_eq!(confirm.confirmed(), Some(true));
+    }
+
+    #[test]
+    fn test_accessible_prompt() {
+        let confirm = Confirm::new("Continue?").default(true);
+        let prompt = confirm.accessible_prompt();
+        assert!(prompt.contains("Continue?"));
+        assert!(prompt.contains("Y/n")); // Default yes, so Y is capitalized
+
+        let confirm = Confirm::new("Continue?").default(false);
+        let prompt = confirm.accessible_prompt();
+        assert!(prompt.contains("y/N")); // Default no, so N is capitalized
+    }
+
+    #[test]
+    fn test_accessible_apply_input() {
+        let mut confirm = Confirm::new("Continue?").default(false);
+        assert!(confirm.apply_accessible_input("y"));
+        assert!(confirm.is_submitted());
+        assert!(confirm.value());
+
+        let mut confirm = Confirm::new("Continue?").default(true);
+        assert!(confirm.apply_accessible_input(""));
+        assert!(confirm.is_submitted());
+        assert!(confirm.value()); // Default true
+
+        let mut confirm = Confirm::new("Continue?").default(true);
+        assert!(confirm.apply_accessible_input("n"));
+        assert!(confirm.is_submitted());
+        assert!(!confirm.value());
     }
 }

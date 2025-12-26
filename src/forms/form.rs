@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use super::field::FieldValue;
 use super::group::{Group, GroupMsg};
+use crate::runtime::accessible::Accessible;
 use crate::runtime::{Cmd, Model};
 use crate::style::Color;
 use crate::terminal::{Event, KeyCode};
@@ -363,6 +364,113 @@ impl Form {
         }
 
         output
+    }
+}
+
+impl Accessible for Form {
+    type Message = FormMsg;
+
+    fn accessible_prompt(&self) -> String {
+        let mut prompt = String::new();
+
+        // Form title
+        if let Some(title) = &self.title {
+            prompt.push_str(&format!("=== {} ===\n", title));
+        }
+
+        // Form description
+        if let Some(desc) = &self.description {
+            prompt.push_str(&format!("{}\n", desc));
+        }
+
+        // Progress indicator
+        if self.groups.len() > 1 {
+            prompt.push_str(&format!(
+                "Page {}/{}\n",
+                self.current_group + 1,
+                self.groups.len()
+            ));
+        }
+
+        prompt.push('\n');
+
+        // Current group and field prompt
+        if let Some(group) = self.groups.get(self.current_group) {
+            prompt.push_str(&group.accessible_prompt());
+        }
+
+        prompt
+    }
+
+    fn parse_accessible_input(&self, input: &str) -> Option<Self::Message> {
+        if let Some(group) = self.groups.get(self.current_group) {
+            let idx = self.current_group;
+            group
+                .parse_accessible_input(input)
+                .map(|m| FormMsg::Group(idx, m))
+        } else {
+            None
+        }
+    }
+
+    fn is_accessible_complete(&self) -> bool {
+        self.submitted || self.cancelled
+    }
+}
+
+impl Form {
+    /// Run the form in accessible mode.
+    ///
+    /// This method handles the complete accessible flow, prompting for
+    /// each field and advancing through groups automatically.
+    ///
+    /// Returns the form results on success, or None if cancelled.
+    pub fn run_accessible(&mut self) -> std::io::Result<Option<FormResults>> {
+        use std::io::{self, BufRead, Write};
+
+        self.init_form();
+
+        loop {
+            // Print the accessible prompt
+            print!("{}", self.accessible_prompt());
+            io::stdout().flush()?;
+
+            // Read input
+            let mut input = String::new();
+            io::stdin().lock().read_line(&mut input)?;
+
+            // Apply input to current field
+            if let Some(group) = self.groups.get_mut(self.current_group) {
+                let complete = group.apply_accessible_input(&input);
+
+                if complete {
+                    // Check if group is cancelled
+                    if group.is_cancelled() {
+                        self.cancelled = true;
+                        return Ok(None);
+                    }
+
+                    // Move to next field or group
+                    if group.is_complete() {
+                        if self.is_last_group() {
+                            self.submitted = true;
+                            println!("\nForm completed!");
+                            return Ok(Some(self.results()));
+                        } else {
+                            self.next_group();
+                        }
+                    }
+                }
+            }
+
+            // Check if form is done
+            if self.is_accessible_complete() {
+                if self.cancelled {
+                    return Ok(None);
+                }
+                return Ok(Some(self.results()));
+            }
+        }
     }
 }
 

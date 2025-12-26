@@ -111,6 +111,29 @@
 //!
 //! The framework automatically detects non-interactive environments and
 //! adjusts behavior accordingly (no animations, no prompts, clear errors).
+//!
+//! ## Accessible Mode
+//!
+//! For screen reader users and other accessible environments, set the
+//! `ACCESSIBLE=1` environment variable. This enables:
+//!
+//! - Plain text prompts without ANSI formatting
+//! - Numbered options for selection components
+//! - Line-based input instead of raw terminal mode
+//!
+//! Forms can be run in accessible mode:
+//!
+//! ```rust,ignore
+//! let mut form = Form::new()
+//!     .group(Group::new()
+//!         .field(InputField::new("name").title("Your Name").build()));
+//!
+//! if let Some(results) = form.run_accessible()? {
+//!     println!("Name: {}", results.get_string("name").unwrap_or(""));
+//! }
+//! ```
+//!
+//! Components implement the [`Accessible`] trait for custom accessible handling.
 
 pub mod components;
 pub mod forms;
@@ -120,7 +143,7 @@ pub mod terminal;
 pub mod util;
 
 // Re-export core types at crate root
-pub use runtime::{Cmd, Model, Program, ProgramOptions, Sub};
+pub use runtime::{Accessible, AccessibleInput, Cmd, Model, Program, ProgramOptions, Sub};
 pub use terminal::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 
 // Re-export commonly used components
