@@ -137,6 +137,7 @@
 
 pub mod components;
 pub mod forms;
+pub mod output;
 pub mod runtime;
 pub mod style;
 pub mod terminal;
