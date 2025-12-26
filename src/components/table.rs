@@ -237,6 +237,28 @@ impl Table {
         self
     }
 
+    /// Render the table as a string.
+    ///
+    /// This is a convenience method that returns the table view as a string
+    /// without requiring the `Model` trait to be in scope.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use ferment::components::{Column, Table};
+    ///
+    /// let table = Table::new()
+    ///     .columns(vec![Column::new("Name"), Column::new("Value")])
+    ///     .rows(vec![vec!["foo".to_string(), "bar".to_string()]])
+    ///     .focused(false);
+    ///
+    /// println!("{}", table.render());
+    /// ```
+    pub fn render(&self) -> String {
+        use crate::Model;
+        Model::view(self)
+    }
+
     /// Get the current row cursor position.
     pub fn cursor_row(&self) -> usize {
         self.cursor_row
