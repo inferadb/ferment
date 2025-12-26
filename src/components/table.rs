@@ -228,6 +228,15 @@ impl Table {
         self
     }
 
+    /// Set the focus state.
+    ///
+    /// When focused is false, the table will not show selection highlighting,
+    /// making it suitable for non-interactive CLI output.
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
+        self
+    }
+
     /// Get the current row cursor position.
     pub fn cursor_row(&self) -> usize {
         self.cursor_row
@@ -524,7 +533,8 @@ impl Model for Table {
 
             for (view_idx, row_idx) in (start..end).enumerate() {
                 let row = &self.rows[row_idx];
-                let is_selected_row = row_idx == self.cursor_row;
+                // Only show selection when focused
+                let is_selected_row = self.focused && row_idx == self.cursor_row;
 
                 // Determine row color
                 let row_color = if is_selected_row {
