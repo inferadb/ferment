@@ -298,18 +298,19 @@ impl<M: Model> Program<M> {
         let mut stdout = io::stdout();
         let frame_duration = Duration::from_secs(1) / self.options.fps;
 
-        // Run init command
+        // Create pending_ticks before init so Cmd::tick works from init()
+        let mut pending_ticks: Vec<PendingTick<M::Message>> = Vec::new();
+        let mut active_subs: HashMap<String, ActiveSub<M::Message>> = HashMap::new();
+
+        // Run init command (may schedule ticks)
         if let Some(cmd) = self.model.init() {
-            if self.process_command(cmd)? {
+            if self.process_command_with_ticks(cmd, &mut pending_ticks)? {
                 return Ok(());
             }
         }
 
         // Initial render
         self.render(&mut stdout)?;
-
-        let mut pending_ticks: Vec<PendingTick<M::Message>> = Vec::new();
-        let mut active_subs: HashMap<String, ActiveSub<M::Message>> = HashMap::new();
 
         // Initialize subscriptions
         self.refresh_subscriptions(&mut active_subs);
@@ -555,7 +556,11 @@ impl<M: Model> Program<M> {
         let mut stdout = io::stdout();
 
         if self.options.alt_screen {
-            execute!(stdout, terminal::EnterAlternateScreen)?;
+            execute!(
+                stdout,
+                terminal::EnterAlternateScreen,
+                cursor::MoveTo(0, 0)
+            )?;
         }
 
         if self.options.mouse {
@@ -611,8 +616,8 @@ impl<M: Model> Program<M> {
             if self.options.alt_screen {
                 execute!(
                     stdout,
-                    cursor::MoveTo(0, 0),
-                    terminal::Clear(ClearType::All)
+                    terminal::Clear(ClearType::All),
+                    cursor::MoveTo(0, 0)
                 )?;
             } else {
                 // For inline mode, clear previous lines

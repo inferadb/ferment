@@ -41,22 +41,11 @@ impl BadgeVariant {
     /// Get the default icon for this variant.
     pub fn icon(&self) -> &'static str {
         match self {
-            BadgeVariant::Success => "●",
-            BadgeVariant::Error => "●",
-            BadgeVariant::Warning => "●",
-            BadgeVariant::Info => "●",
+            BadgeVariant::Success => "✓",
+            BadgeVariant::Error => "✗",
+            BadgeVariant::Warning => "⚠",
+            BadgeVariant::Info => "ℹ",
             BadgeVariant::Neutral => "○",
-        }
-    }
-
-    /// Get the default emoji icon for this variant.
-    pub fn emoji(&self) -> &'static str {
-        match self {
-            BadgeVariant::Success => "🟢",
-            BadgeVariant::Error => "🔴",
-            BadgeVariant::Warning => "🟡",
-            BadgeVariant::Info => "🔵",
-            BadgeVariant::Neutral => "⚪",
         }
     }
 
@@ -83,7 +72,6 @@ pub struct StatusBadge {
     icon: Option<String>,
     variant: BadgeVariant,
     color: Option<Color>,
-    use_emoji: bool,
     show_icon: bool,
 }
 
@@ -94,7 +82,6 @@ impl Default for StatusBadge {
             icon: None,
             variant: BadgeVariant::Neutral,
             color: None,
-            use_emoji: true,
             show_icon: true,
         }
     }
@@ -152,12 +139,6 @@ impl StatusBadge {
         self
     }
 
-    /// Use emoji icons (default: true).
-    pub fn use_emoji(mut self, use_emoji: bool) -> Self {
-        self.use_emoji = use_emoji;
-        self
-    }
-
     /// Show the icon (default: true).
     pub fn show_icon(mut self, show: bool) -> Self {
         self.show_icon = show;
@@ -174,8 +155,6 @@ impl StatusBadge {
     fn effective_icon(&self) -> &str {
         if let Some(ref icon) = self.icon {
             icon
-        } else if self.use_emoji {
-            self.variant.emoji()
         } else {
             self.variant.icon()
         }
@@ -206,24 +185,17 @@ impl Model for StatusBadge {
 
     fn view(&self) -> String {
         let mut output = String::new();
+        let color = self.effective_color().to_ansi_fg();
+
+        output.push_str(&color);
 
         if self.show_icon {
-            let icon = self.effective_icon();
-            // For emoji icons, we don't need color codes
-            if self.use_emoji && self.icon.is_none() {
-                output.push_str(icon);
-            } else {
-                output.push_str(&format!(
-                    "{}{}{}",
-                    self.effective_color().to_ansi_fg(),
-                    icon,
-                    "\x1b[0m"
-                ));
-            }
+            output.push_str(self.effective_icon());
             output.push(' ');
         }
 
         output.push_str(&self.label);
+        output.push_str("\x1b[0m");
         output
     }
 
@@ -262,10 +234,12 @@ mod tests {
     }
 
     #[test]
-    fn test_variant_emojis() {
-        assert_eq!(BadgeVariant::Success.emoji(), "🟢");
-        assert_eq!(BadgeVariant::Error.emoji(), "🔴");
-        assert_eq!(BadgeVariant::Warning.emoji(), "🟡");
+    fn test_variant_icons() {
+        assert_eq!(BadgeVariant::Success.icon(), "✓");
+        assert_eq!(BadgeVariant::Error.icon(), "✗");
+        assert_eq!(BadgeVariant::Warning.icon(), "⚠");
+        assert_eq!(BadgeVariant::Info.icon(), "ℹ");
+        assert_eq!(BadgeVariant::Neutral.icon(), "○");
     }
 
     #[test]

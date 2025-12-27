@@ -16,14 +16,13 @@
 //! - [`FilePicker`] - File/directory browser
 //! - [`TabBar`] - Horizontal tab bar with keyboard hints
 //! - [`StatusBadge`] - Colored status indicator
-//! - [`AppLayout`] - Full-screen application layout
-//! - [`FullScreenTable`] - Full-screen table view with title, status, and footer
+//! - [`Modal`] - Centered overlay dialog
+//! - [`TaskList`] - Step-by-step task list with spinners
 
-pub mod app_layout;
-pub mod full_screen_table;
 pub mod confirm;
 pub mod file_picker;
 pub mod list;
+pub mod modal;
 pub mod multi_progress;
 pub mod multi_select;
 pub mod progress;
@@ -32,15 +31,15 @@ pub mod spinner;
 pub mod status_badge;
 pub mod tab_bar;
 pub mod table;
+pub mod task_list;
 pub mod text_area;
 pub mod text_input;
 pub mod viewport;
 
-pub use app_layout::{AppLayout, AppLayoutMsg, TabBuilder};
 pub use confirm::{Confirm, ConfirmMsg};
-pub use full_screen_table::{FullScreenTable, FullScreenTableMsg, StatusLine};
 pub use file_picker::{FileEntry, FilePicker, FilePickerMsg};
 pub use list::{List, ListMsg};
+pub use modal::{Modal, ModalBorder, ModalHint};
 pub use multi_progress::{MultiProgress, MultiProgressMsg, Task, TaskStatus};
 pub use multi_select::{MultiSelect, MultiSelectMsg};
 pub use progress::{Progress, ProgressMsg};
@@ -49,6 +48,7 @@ pub use spinner::{Spinner, SpinnerMsg, SpinnerStyle};
 pub use status_badge::{BadgeVariant, StatusBadge, StatusBadgeMsg};
 pub use tab_bar::{Tab, TabBar, TabBarMsg};
 pub use table::{Align, Column, Table, TableMsg};
+pub use task_list::{TaskItem, TaskList, TaskListMsg, TaskState};
 pub use text_area::{CursorPos, TextArea, TextAreaMsg};
 pub use text_input::{TextInput, TextInputMsg};
 pub use viewport::{Viewport, ViewportMsg};

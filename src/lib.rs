@@ -152,8 +152,8 @@ pub use runtime::cmd;
 
 // Re-export commonly used components
 pub use components::{
-    AppLayout, BadgeVariant, Column, Confirm, FilePicker, List, MultiProgress, MultiSelect,
-    Progress, Select, Spinner, StatusBadge, Tab, TabBar, Table, TextArea, TextInput,
+    BadgeVariant, Column, Confirm, FilePicker, List, MultiProgress, MultiSelect, Progress, Select,
+    Spinner, StatusBadge, Tab, TabBar, Table, TaskList, TextArea, TextInput,
 };
 
 // Re-export style types

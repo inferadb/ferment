@@ -234,51 +234,39 @@ impl Model for TabBar {
         for (i, tab) in self.tabs.iter().enumerate() {
             let is_active = tab.id == self.selected;
 
-            if let Some(key) = tab.key {
-                // Format: [k]ey Label
-                // The key hint shows the keyboard shortcut
+            if is_active {
+                // Active tab: entire label in active color
+                output.push_str(&format!(
+                    "{}{}{}",
+                    self.active_color.to_ansi_fg(),
+                    tab.label,
+                    "\x1b[0m",
+                ));
+            } else if tab.key.is_some() {
+                // Inactive tab with key hint: first char highlighted, rest dimmed
+                let first_char = tab.label.chars().next().unwrap_or_default();
                 let rest: String = tab.label.chars().skip(1).collect();
 
-                if is_active {
-                    output.push_str(&format!(
-                        "{}[{}]{}{}\x1b[1m{}\x1b[0m",
-                        self.key_color.to_ansi_fg(),
-                        key,
-                        "\x1b[0m",
-                        self.active_color.to_ansi_fg(),
-                        rest,
-                    ));
-                } else {
-                    output.push_str(&format!(
-                        "{}[{}]{}{}",
-                        self.inactive_color.to_ansi_fg(),
-                        key,
-                        rest,
-                        "\x1b[0m",
-                    ));
-                }
-
-                // Calculate display length: [x] + rest
-                content_len += 3 + rest.chars().count();
+                output.push_str(&format!(
+                    "{}{}{}{}{}",
+                    self.key_color.to_ansi_fg(),
+                    first_char,
+                    "\x1b[0m",
+                    self.inactive_color.to_ansi_fg(),
+                    rest,
+                ));
+                output.push_str("\x1b[0m");
             } else {
-                // No key hint
-                if is_active {
-                    output.push_str(&format!(
-                        "{}\x1b[1m{}\x1b[0m",
-                        self.active_color.to_ansi_fg(),
-                        tab.label,
-                    ));
-                } else {
-                    output.push_str(&format!(
-                        "{}{}{}",
-                        self.inactive_color.to_ansi_fg(),
-                        tab.label,
-                        "\x1b[0m",
-                    ));
-                }
-
-                content_len += tab.label.chars().count();
+                // Inactive tab without key hint: all dimmed
+                output.push_str(&format!(
+                    "{}{}{}",
+                    self.inactive_color.to_ansi_fg(),
+                    tab.label,
+                    "\x1b[0m",
+                ));
             }
+
+            content_len += tab.label.chars().count();
 
             if i < self.tabs.len() - 1 {
                 output.push_str(&self.separator);
