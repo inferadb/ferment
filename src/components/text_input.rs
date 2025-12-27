@@ -317,18 +317,27 @@ impl Model for TextInput {
             };
 
             if self.focused {
-                // Show cursor
-                let (before, after) = display_value.split_at(if self.hidden {
+                // Show cursor - need character-aware splitting for hidden mode
+                let char_pos = if self.hidden {
                     self.value[..self.cursor].chars().count()
                 } else {
-                    self.cursor.min(display_value.len())
-                });
-                let cursor_char = if after.is_empty() { " " } else { &after[..1] };
-                let after = if after.is_empty() {
-                    ""
-                } else {
-                    &after[cursor_char.len()..]
+                    // For non-hidden, cursor is already a byte position
+                    // Convert to character position for consistent handling
+                    self.value[..self.cursor.min(self.value.len())]
+                        .chars()
+                        .count()
                 };
+
+                // Split display_value at character boundary
+                let mut before = String::new();
+                let mut after_chars = display_value.chars().peekable();
+                for _ in 0..char_pos {
+                    if let Some(c) = after_chars.next() {
+                        before.push(c);
+                    }
+                }
+                let cursor_char: String = after_chars.next().map(|c| c.to_string()).unwrap_or_else(|| " ".to_string());
+                let after: String = after_chars.collect();
 
                 output.push_str(&format!("{}{}", self.text_color.to_ansi_fg(), before));
                 output.push_str(&format!(
@@ -500,5 +509,27 @@ mod tests {
 
         let msg = input.parse_accessible_input("");
         assert!(matches!(msg, Some(TextInputMsg::Submit)));
+    }
+
+    #[test]
+    fn test_hidden_mode_paste() {
+        // This test ensures that pasting into a hidden input doesn't panic
+        // due to multi-byte character handling (• is 3 bytes in UTF-8).
+        // The bug occurred because split_at was called with a character count
+        // but it expects a byte position - when • (3 bytes) is used for display,
+        // this would cause a panic at non-ASCII-aligned positions.
+        let mut input = TextInput::new().hidden(true);
+        input.set_focused(true);
+
+        // Use a long mock secret to trigger the byte/char position mismatch
+        let secret = "sk-test-abc123def456ghi789jkl012mno345pqr678stu901vwx234yz";
+        input.update(TextInputMsg::Paste(secret.to_string()));
+
+        // Should not panic and value should be set correctly
+        assert_eq!(input.get_value(), secret);
+
+        // View should render without panicking
+        let view = input.view();
+        assert!(view.contains("•")); // Should show bullets, not the actual text
     }
 }

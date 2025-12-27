@@ -600,6 +600,9 @@ impl<M: Model> Program<M> {
 
         terminal::disable_raw_mode()?;
 
+        // Ensure cursor is at column 0 for clean output after TUI exits
+        execute!(stdout, cursor::MoveToColumn(0))?;
+
         Ok(())
     }
 

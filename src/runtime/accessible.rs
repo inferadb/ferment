@@ -185,22 +185,39 @@ pub fn println_accessible(line: &str) -> io::Result<()> {
 }
 
 /// Strip ANSI escape codes from a string.
+///
+/// Handles both CSI sequences (`\x1b[...m`) and OSC sequences (`\x1b]...\x07`),
+/// including OSC 8 hyperlinks.
 pub fn strip_ansi(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut chars = s.chars().peekable();
 
     while let Some(c) = chars.next() {
         if c == '\x1b' {
-            // Skip escape sequence
-            if chars.peek() == Some(&'[') {
-                chars.next(); // consume '['
-                              // Skip until we find a letter (the terminator)
-                while let Some(&next) = chars.peek() {
+            match chars.peek() {
+                Some('[') => {
+                    // CSI sequence: ESC [ ... (letter)
                     chars.next();
-                    if next.is_ascii_alphabetic() {
-                        break;
+                    while let Some(&next) = chars.peek() {
+                        chars.next();
+                        if next.is_ascii_alphabetic() {
+                            break;
+                        }
                     }
                 }
+                Some(']') => {
+                    // OSC sequence: ESC ] ... (BEL or ESC \)
+                    chars.next();
+                    while let Some(next) = chars.next() {
+                        if next == '\x07' {
+                            break;
+                        } else if next == '\x1b' && chars.peek() == Some(&'\\') {
+                            chars.next();
+                            break;
+                        }
+                    }
+                }
+                _ => {}
             }
         } else {
             result.push(c);
@@ -304,12 +321,19 @@ mod tests {
 
     #[test]
     fn test_strip_ansi() {
+        // CSI sequences
         assert_eq!(strip_ansi("\x1b[31mRed\x1b[0m"), "Red");
         assert_eq!(strip_ansi("\x1b[1;32mBold Green\x1b[0m"), "Bold Green");
         assert_eq!(strip_ansi("No codes"), "No codes");
         assert_eq!(
             strip_ansi("\x1b[38;2;255;0;0mTruecolor\x1b[0m"),
             "Truecolor"
+        );
+
+        // OSC 8 hyperlinks
+        assert_eq!(
+            strip_ansi("\x1b]8;;https://example.com\x07link\x1b]8;;\x07"),
+            "link"
         );
     }
 }

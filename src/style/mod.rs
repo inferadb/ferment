@@ -26,17 +26,45 @@ pub fn width(s: &str) -> usize {
 }
 
 /// Strip ANSI escape codes from a string.
+///
+/// Handles both CSI sequences (`\x1b[...m`) and OSC sequences (`\x1b]...\x07`),
+/// including OSC 8 hyperlinks.
 pub fn strip_ansi(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
-    let mut in_escape = false;
+    let mut chars = s.chars().peekable();
 
-    for c in s.chars() {
-        if in_escape {
-            if c == 'm' {
-                in_escape = false;
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            // Check what type of escape sequence
+            match chars.peek() {
+                Some('[') => {
+                    // CSI sequence: ESC [ ... m
+                    chars.next(); // consume '['
+                    while let Some(&next) = chars.peek() {
+                        chars.next();
+                        if next == 'm' {
+                            break;
+                        }
+                    }
+                }
+                Some(']') => {
+                    // OSC sequence: ESC ] ... (BEL or ESC \)
+                    chars.next(); // consume ']'
+                    while let Some(next) = chars.next() {
+                        if next == '\x07' {
+                            // BEL terminates OSC
+                            break;
+                        } else if next == '\x1b' && chars.peek() == Some(&'\\') {
+                            // ESC \ (ST - String Terminator)
+                            chars.next();
+                            break;
+                        }
+                    }
+                }
+                _ => {
+                    // Unknown escape, skip just the ESC
+                }
             }
-        } else if c == '\x1b' {
-            in_escape = true;
         } else {
             result.push(c);
         }
@@ -405,9 +433,22 @@ mod tests {
 
     #[test]
     fn test_strip_ansi() {
+        // CSI sequences
         assert_eq!(strip_ansi("\x1b[31mred\x1b[0m"), "red");
         assert_eq!(strip_ansi("no escapes"), "no escapes");
         assert_eq!(strip_ansi("\x1b[1;32mbold green\x1b[0m"), "bold green");
+
+        // OSC 8 hyperlinks (BEL terminated)
+        assert_eq!(
+            strip_ansi("\x1b]8;;https://example.com\x07link text\x1b]8;;\x07"),
+            "link text"
+        );
+
+        // Mixed CSI and OSC
+        assert_eq!(
+            strip_ansi("\x1b[36m\x1b]8;;https://example.com\x07click here\x1b]8;;\x07\x1b[0m"),
+            "click here"
+        );
     }
 
     #[test]

@@ -207,18 +207,38 @@ pub fn terminal_height() -> usize {
 /// Strip ANSI escape codes from a string.
 ///
 /// Useful for calculating actual display width or for non-TTY output.
+/// Handles both CSI sequences (`\x1b[...m`) and OSC sequences (`\x1b]...\x07`),
+/// including OSC 8 hyperlinks.
 pub fn strip_ansi(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut chars = s.chars().peekable();
 
     while let Some(c) = chars.next() {
         if c == '\x1b' {
-            // Skip until we hit a letter (end of escape sequence)
-            while let Some(&next) = chars.peek() {
-                chars.next();
-                if next.is_ascii_alphabetic() {
-                    break;
+            match chars.peek() {
+                Some('[') => {
+                    // CSI sequence: ESC [ ... (letter)
+                    chars.next();
+                    while let Some(&next) = chars.peek() {
+                        chars.next();
+                        if next.is_ascii_alphabetic() {
+                            break;
+                        }
+                    }
                 }
+                Some(']') => {
+                    // OSC sequence: ESC ] ... (BEL or ESC \)
+                    chars.next();
+                    while let Some(next) = chars.next() {
+                        if next == '\x07' {
+                            break;
+                        } else if next == '\x1b' && chars.peek() == Some(&'\\') {
+                            chars.next();
+                            break;
+                        }
+                    }
+                }
+                _ => {}
             }
         } else {
             result.push(c);
@@ -234,9 +254,16 @@ mod tests {
 
     #[test]
     fn test_strip_ansi() {
+        // CSI sequences
         assert_eq!(strip_ansi("\x1b[32mgreen\x1b[0m"), "green");
         assert_eq!(strip_ansi("no colors"), "no colors");
         assert_eq!(strip_ansi("\x1b[1m\x1b[31mbold red\x1b[0m"), "bold red");
+
+        // OSC 8 hyperlinks
+        assert_eq!(
+            strip_ansi("\x1b]8;;https://example.com\x07link\x1b]8;;\x07"),
+            "link"
+        );
     }
 
     #[test]
