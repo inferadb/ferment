@@ -92,6 +92,17 @@ let textarea = TextArea::new()
     .width(60);
 ```
 
+#### External Editor Support
+
+Open content in your preferred editor with `Ctrl+O`:
+
+```rust
+let textarea = TextArea::new()
+    .placeholder("Enter code...")
+    .editor("code --wait")      // Use VS Code (default: $VISUAL or $EDITOR)
+    .editor_extension("rs");    // File extension for syntax highlighting
+```
+
 ### Selection Components
 
 #### Select
@@ -217,7 +228,9 @@ let table = Table::new()
 
 ## Forms
 
-Build multi-step forms with validation:
+Build multi-step forms with validation, inspired by [Huh](https://github.com/charmbracelet/huh).
+
+### Basic Form
 
 ```rust
 use ferment::forms::{Form, Group, InputField, SelectField, ConfirmField};
@@ -239,15 +252,296 @@ let form = Form::new()
     );
 ```
 
-## Styling
+### Form Layouts
+
+Control how form groups are displayed:
 
 ```rust
-use ferment::style::{Style, Color};
+use ferment::forms::{Form, FormLayout};
+
+// Default: one group at a time (wizard-style)
+let wizard = Form::new().layout(FormLayout::Default);
+
+// Stack: all groups visible at once
+let stacked = Form::new().layout(FormLayout::Stack);
+
+// Columns: side-by-side layout
+let columns = Form::new().layout(FormLayout::Columns(2));
+```
+
+### All Field Types
+
+```rust
+use ferment::forms::{
+    InputField, SelectField, MultiSelectField, ConfirmField,
+    NoteField, FilePickerField
+};
+
+// Text input with validation
+InputField::new("email")
+    .title("Email Address")
+    .placeholder("user@example.com")
+    .required()
+    .build();
+
+// Single selection
+SelectField::new("country")
+    .title("Country")
+    .options(["USA", "Canada", "UK", "Germany"])
+    .build();
+
+// Multiple selection with constraints
+MultiSelectField::new("languages")
+    .title("Languages")
+    .options(["Rust", "Go", "Python", "TypeScript"])
+    .min(1)
+    .max(3)
+    .build();
+
+// Yes/No confirmation
+ConfirmField::new("agree")
+    .title("Accept terms?")
+    .default(false)
+    .build();
+
+// Display-only note
+NoteField::new("Please review carefully before proceeding.")
+    .title("Important")
+    .build();
+
+// File/directory picker
+FilePickerField::new("config_file")
+    .title("Select config file")
+    .directory("/etc")
+    .extensions(["toml", "yaml", "json"])
+    .build();
+```
+
+### Dynamic Content
+
+Field titles and descriptions can update dynamically:
+
+```rust
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+let attempt = Arc::new(AtomicUsize::new(1));
+let attempt_clone = attempt.clone();
+
+InputField::new("password")
+    .title_fn(move || format!("Password (attempt {})", attempt_clone.load(Ordering::SeqCst)))
+    .description_fn(|| "Must be at least 8 characters".to_string())
+    .build();
+```
+
+### FilePicker Component
+
+Browse and select files/directories:
+
+```rust
+use ferment::components::FilePicker;
+
+let picker = FilePicker::new()
+    .title("Select a file")
+    .directory("/home/user/projects")
+    .extensions(["rs", "toml"])  // Filter by extension
+    .show_hidden(false)          // Hide dotfiles
+    .height(15);                 // Visible rows
+
+// Or for directory selection only
+let dir_picker = FilePicker::new()
+    .title("Select output directory")
+    .dirs_only();
+```
+
+## Styling
+
+Ferment includes a comprehensive styling system inspired by [Lip Gloss](https://github.com/charmbracelet/lipgloss).
+
+### Basic Styling
+
+```rust
+use ferment::style::{Style, Color, Border};
 
 let styled = Style::new()
     .fg(Color::Cyan)
+    .bg(Color::Black)
     .bold()
+    .italic()
+    .border(Border::Rounded)
     .render("Hello, World!");
+```
+
+### CSS-like Shorthand
+
+Padding and margin support CSS-style shorthand (1, 2, 3, or 4 values):
+
+```rust
+use ferment::style::Style;
+
+// All sides: 2
+Style::new().padding(&[2]);
+
+// Vertical: 1, Horizontal: 2
+Style::new().padding(&[1, 2]);
+
+// Top: 1, Horizontal: 2, Bottom: 3
+Style::new().margin(&[1, 2, 3]);
+
+// Top: 1, Right: 2, Bottom: 3, Left: 4 (clockwise)
+Style::new().margin(&[1, 2, 3, 4]);
+```
+
+### Block Dimensions
+
+Control width, height, and alignment:
+
+```rust
+use ferment::style::{Style, Position};
+
+let box_style = Style::new()
+    .width(40)
+    .height(10)
+    .max_width(80)
+    .align(Position::Center, Position::Center)
+    .border(Border::Rounded);
+```
+
+### Layout Utilities
+
+Compose blocks horizontally or vertically:
+
+```rust
+use ferment::style::{join_horizontal, join_vertical, place, Position};
+
+// Side-by-side blocks (aligned at top)
+let combined = join_horizontal(Position::Top, &[left_block, right_block]);
+
+// Stacked blocks (centered horizontally)
+let stacked = join_vertical(Position::Center, &[header, content, footer]);
+
+// Position content in a box
+let centered = place(80, 24, Position::Center, Position::Center, "Centered!");
+```
+
+### Adaptive Colors
+
+Colors that adapt to light/dark terminal backgrounds:
+
+```rust
+use ferment::style::Color;
+
+// Different colors for light vs dark backgrounds
+let adaptive = Color::Adaptive {
+    light: Box::new(Color::Ansi256(236)),  // Dark gray for light bg
+    dark: Box::new(Color::Ansi256(252)),   // Light gray for dark bg
+};
+
+// Full color specification for all terminal types
+let complete = Color::Complete {
+    true_color: "#ff6600".to_string(),
+    ansi256: 208,
+    ansi: 3,  // Yellow fallback
+};
+```
+
+### Style Inheritance
+
+Build styles incrementally:
+
+```rust
+use ferment::style::Style;
+
+let base = Style::new()
+    .fg(Color::White)
+    .bold();
+
+let highlight = Style::new()
+    .inherit(&base)       // Copy unset properties from base
+    .bg(Color::Blue);
+
+// Unset specific properties
+let plain = highlight.unset_bold().unset_bg();
+```
+
+## Program Configuration
+
+### Builder Pattern
+
+Configure the program with a fluent builder API:
+
+```rust
+use ferment::{Program, Model};
+use std::time::Duration;
+
+Program::new(my_model)
+    .with_alt_screen()           // Use alternate screen buffer
+    .with_mouse()                // Enable mouse events
+    .with_bracketed_paste()      // Enable paste detection
+    .with_focus_change()         // Enable focus/blur events
+    .with_tick_rate(Duration::from_millis(16))  // ~60 FPS
+    .with_accessible()           // Force accessible mode
+    .run()?;
+```
+
+### Message Filtering
+
+Pre-process or block messages before they reach your update function:
+
+```rust
+Program::new(my_model)
+    .with_filter(|model, msg| {
+        // Block all messages while loading
+        if model.is_loading {
+            return None;
+        }
+        // Transform or pass through
+        Some(msg)
+    })
+    .run()?;
+```
+
+### Commands
+
+The `cmd` module provides Bubble Tea-style command functions:
+
+```rust
+use ferment::cmd;
+use std::time::Duration;
+
+// Quit the program
+cmd::quit()
+
+// Batch multiple commands
+cmd::batch(vec![cmd1, cmd2, cmd3])
+
+// Sequential execution
+cmd::sequence(vec![cmd1, cmd2, cmd3])
+
+// Periodic tick
+cmd::tick(Duration::from_secs(1), |_| Msg::Tick)
+
+// No-op command
+cmd::none()
+```
+
+### External Process Execution
+
+Spawn external processes (editors, etc.) with terminal teardown/restore:
+
+```rust
+use ferment::Cmd;
+use std::process::Command;
+
+let mut cmd = Command::new("vim");
+cmd.arg("file.txt");
+
+Cmd::run_process(cmd, |result| {
+    match result {
+        Ok(status) => Msg::EditorClosed(status.success()),
+        Err(_) => Msg::EditorFailed,
+    }
+})
 ```
 
 ## Architecture

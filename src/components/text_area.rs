@@ -13,6 +13,8 @@
 //!     .width(60);
 //! ```
 
+use std::process::Command;
+
 use crate::runtime::accessible::Accessible;
 use crate::runtime::{Cmd, Model};
 use crate::style::Color;
@@ -67,6 +69,10 @@ pub enum TextAreaMsg {
     PageUp,
     /// Page down.
     PageDown,
+    /// Open content in external editor.
+    OpenEditor,
+    /// Result from external editor (new content).
+    EditorResult(String),
 }
 
 /// Cursor position in the text area.
@@ -97,6 +103,10 @@ pub struct TextArea {
     show_line_numbers: bool,
     max_lines: Option<usize>,
     validation_error: Option<String>,
+    /// Custom editor command (overrides $EDITOR).
+    editor: Option<String>,
+    /// File extension for temp file when using external editor.
+    editor_extension: String,
 }
 
 impl Default for TextArea {
@@ -125,6 +135,8 @@ impl TextArea {
             show_line_numbers: false,
             max_lines: None,
             validation_error: None,
+            editor: None,
+            editor_extension: "txt".to_string(),
         }
     }
 
@@ -173,6 +185,37 @@ impl TextArea {
     /// Set maximum number of lines (None for unlimited).
     pub fn max_lines(mut self, max: Option<usize>) -> Self {
         self.max_lines = max;
+        self
+    }
+
+    /// Set a custom editor command (overrides $EDITOR / $VISUAL).
+    ///
+    /// If not set, falls back to $VISUAL, then $EDITOR, then "vi".
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let textarea = TextArea::new()
+    ///     .editor("code --wait")  // Use VS Code
+    ///     .editor_extension("md"); // Use markdown extension
+    /// ```
+    pub fn editor(mut self, editor: impl Into<String>) -> Self {
+        self.editor = Some(editor.into());
+        self
+    }
+
+    /// Set the file extension for the temp file when using external editor.
+    ///
+    /// Defaults to "txt". This helps editors with syntax highlighting.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let textarea = TextArea::new()
+    ///     .editor_extension("rs"); // For Rust code
+    /// ```
+    pub fn editor_extension(mut self, ext: impl Into<String>) -> Self {
+        self.editor_extension = ext.into();
         self
     }
 
@@ -482,6 +525,70 @@ impl TextArea {
         }
     }
 
+    /// Create a command to open the current content in an external editor.
+    ///
+    /// Uses `Cmd::run_process` to spawn the editor. When the editor closes,
+    /// the file content is read back and returned as an `EditorResult` message.
+    pub fn open_in_editor(&self) -> Cmd<TextAreaMsg> {
+        let content = self.get_value();
+        let extension = self.editor_extension.clone();
+        let editor = self.editor.clone();
+
+        // Get the editor command
+        let editor_cmd = editor
+            .or_else(|| std::env::var("VISUAL").ok())
+            .or_else(|| std::env::var("EDITOR").ok())
+            .unwrap_or_else(|| "vi".to_string());
+
+        // Create temp file with content
+        let temp_path =
+            std::env::temp_dir().join(format!("ferment_edit_{}.{}", std::process::id(), extension));
+
+        // Write content to temp file
+        if std::fs::write(&temp_path, &content).is_err() {
+            // If we can't write the file, return the original content
+            return Cmd::perform(move || TextAreaMsg::EditorResult(content));
+        }
+
+        let temp_path_clone = temp_path.clone();
+
+        // Parse the editor command (may include arguments like "code --wait")
+        let parts: Vec<&str> = editor_cmd.split_whitespace().collect();
+        let (program, args) = if parts.is_empty() {
+            ("vi", Vec::new())
+        } else {
+            (parts[0], parts[1..].to_vec())
+        };
+
+        let mut cmd = Command::new(program);
+        for arg in args {
+            cmd.arg(arg);
+        }
+        cmd.arg(&temp_path);
+
+        Cmd::run_process(cmd, move |result| {
+            if result.is_ok() {
+                // Read the edited content
+                match std::fs::read_to_string(&temp_path_clone) {
+                    Ok(new_content) => {
+                        // Clean up temp file
+                        let _ = std::fs::remove_file(&temp_path_clone);
+                        TextAreaMsg::EditorResult(new_content)
+                    }
+                    Err(_) => {
+                        // If read fails, keep original content
+                        let _ = std::fs::remove_file(&temp_path_clone);
+                        TextAreaMsg::EditorResult(content.clone())
+                    }
+                }
+            } else {
+                // Editor failed, keep original content
+                let _ = std::fs::remove_file(&temp_path_clone);
+                TextAreaMsg::EditorResult(content.clone())
+            }
+        })
+    }
+
     /// Render a single line with cursor if applicable.
     fn render_line(&self, line_idx: usize, line: &str) -> String {
         let mut output = String::new();
@@ -589,6 +696,12 @@ impl Model for TextArea {
             }
             TextAreaMsg::PageUp => self.page_up(),
             TextAreaMsg::PageDown => self.page_down(),
+            TextAreaMsg::OpenEditor => {
+                return Some(self.open_in_editor());
+            }
+            TextAreaMsg::EditorResult(content) => {
+                self.set_value_internal(content);
+            }
         }
         None
     }
@@ -674,6 +787,7 @@ impl Model for TextArea {
                         KeyCode::Char('u') => Some(TextAreaMsg::Clear),
                         KeyCode::Char('n') => Some(TextAreaMsg::CursorDown),
                         KeyCode::Char('p') => Some(TextAreaMsg::CursorUp),
+                        KeyCode::Char('o') => Some(TextAreaMsg::OpenEditor),
                         KeyCode::Enter => Some(TextAreaMsg::Submit),
                         KeyCode::Home => Some(TextAreaMsg::CursorStart),
                         KeyCode::End => Some(TextAreaMsg::CursorEnd),

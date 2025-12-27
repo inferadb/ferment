@@ -91,6 +91,12 @@ impl ProgramOptions {
     }
 }
 
+/// A message filter function that can modify or block messages.
+///
+/// Return `Some(msg)` to pass the message through (possibly modified),
+/// or `None` to block the message from reaching the model.
+pub type MessageFilter<M, Msg> = Box<dyn Fn(&M, Msg) -> Option<Msg> + Send>;
+
 /// The program runtime that manages the event loop.
 ///
 /// The program orchestrates:
@@ -134,6 +140,7 @@ pub struct Program<M: Model> {
     model: M,
     options: ProgramOptions,
     last_view: String,
+    filter: Option<MessageFilter<M, M::Message>>,
 }
 
 impl<M: Model> Program<M> {
@@ -143,12 +150,52 @@ impl<M: Model> Program<M> {
             model,
             options: ProgramOptions::default(),
             last_view: String::new(),
+            filter: None,
         }
     }
 
     /// Configure the program with custom options.
     pub fn with_options(mut self, options: ProgramOptions) -> Self {
         self.options = options;
+        self
+    }
+
+    /// Add a message filter.
+    ///
+    /// The filter function is called before each message reaches the model's
+    /// update function. It can:
+    /// - Pass the message through unchanged: `Some(msg)`
+    /// - Modify the message: `Some(modified_msg)`
+    /// - Block the message: `None`
+    ///
+    /// This is useful for:
+    /// - Logging all messages
+    /// - Blocking certain inputs in specific states
+    /// - Transforming messages globally
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use ferment::Program;
+    ///
+    /// Program::new(model)
+    ///     .with_filter(|model, msg| {
+    ///         // Log all messages
+    ///         eprintln!("Message received: {:?}", msg);
+    ///         // Block quit if unsaved changes
+    ///         if matches!(msg, Msg::Quit) && model.has_unsaved_changes {
+    ///             None // Block the quit
+    ///         } else {
+    ///             Some(msg) // Pass through
+    ///         }
+    ///     })
+    ///     .run()
+    /// ```
+    pub fn with_filter<F>(mut self, filter: F) -> Self
+    where
+        F: Fn(&M, M::Message) -> Option<M::Message> + Send + 'static,
+    {
+        self.filter = Some(Box::new(filter));
         self
     }
 
@@ -170,12 +217,65 @@ impl<M: Model> Program<M> {
         self
     }
 
+    /// Enable bracketed paste mode.
+    ///
+    /// When enabled, pasted text is delivered as a single `Event::Paste(String)`
+    /// instead of individual key events.
+    pub fn with_bracketed_paste(mut self) -> Self {
+        self.options.bracketed_paste = true;
+        self
+    }
+
+    /// Enable focus change events.
+    ///
+    /// When enabled, the program will receive `Event::FocusGained` and
+    /// `Event::FocusLost` events when the terminal gains/loses focus.
+    pub fn with_focus_change(mut self) -> Self {
+        self.options.focus_change = true;
+        self
+    }
+
+    /// Enable accessible mode.
+    ///
+    /// In accessible mode, the program renders text-based output suitable
+    /// for screen readers instead of the full TUI.
+    pub fn with_accessible(mut self) -> Self {
+        self.options.accessible = true;
+        self
+    }
+
+    /// Enable reduced motion mode.
+    ///
+    /// When enabled, animations and spinners are disabled or simplified.
+    /// This respects the REDUCE_MOTION environment variable by default.
+    pub fn with_reduce_motion(mut self) -> Self {
+        self.options.reduce_motion = true;
+        self
+    }
+
+    /// Set the tick rate for periodic updates.
+    pub fn with_tick_rate(mut self, duration: Duration) -> Self {
+        self.options.tick_rate = duration;
+        self
+    }
+
     /// Check if running in an interactive terminal.
     pub fn is_interactive() -> bool {
         use std::io::IsTerminal;
         std::io::stdin().is_terminal()
             && std::io::stdout().is_terminal()
             && std::env::var("CI").is_err()
+    }
+
+    /// Apply the message filter if one is set.
+    ///
+    /// Returns `Some(msg)` if the message should be processed,
+    /// or `None` if it was blocked by the filter.
+    fn apply_filter(&self, msg: M::Message) -> Option<M::Message> {
+        match &self.filter {
+            Some(filter) => filter(&self.model, msg),
+            None => Some(msg),
+        }
     }
 
     /// Run the program, blocking until it exits.
@@ -237,8 +337,14 @@ impl<M: Model> Program<M> {
                 }
             }
 
-            // Process accumulated messages
+            // Process accumulated messages (applying filter)
             for msg in messages {
+                // Apply the message filter
+                let msg = match self.apply_filter(msg) {
+                    Some(m) => m,
+                    None => continue, // Message was blocked
+                };
+
                 if let Some(cmd) = self.model.update(msg) {
                     if self.process_command_with_ticks(cmd, &mut pending_ticks)? {
                         return Ok(());
@@ -276,16 +382,19 @@ impl<M: Model> Program<M> {
                 let crossterm_event = event::read()?;
                 let event = Event::from(crossterm_event.clone());
 
-                // Convert to message and update
+                // Convert to message and update (applying filter)
                 if let Some(msg) = self.model.handle_event(event) {
-                    if let Some(cmd) = self.model.update(msg) {
-                        if self.process_command_with_ticks(cmd, &mut pending_ticks)? {
-                            return Ok(());
+                    // Apply the message filter
+                    if let Some(msg) = self.apply_filter(msg) {
+                        if let Some(cmd) = self.model.update(msg) {
+                            if self.process_command_with_ticks(cmd, &mut pending_ticks)? {
+                                return Ok(());
+                            }
                         }
+                        // Refresh subscriptions after update
+                        self.refresh_subscriptions(&mut active_subs);
+                        self.render(&mut stdout)?;
                     }
-                    // Refresh subscriptions after update
-                    self.refresh_subscriptions(&mut active_subs);
-                    self.render(&mut stdout)?;
                 }
 
                 // Handle special events
@@ -379,6 +488,30 @@ impl<M: Model> Program<M> {
                 // For now, we don't support async commands in the sync runtime
                 // This would require tokio integration
                 Ok(false)
+            }
+            CmdResult::RunProcess {
+                mut command,
+                on_exit,
+            } => {
+                // Teardown terminal before running external process
+                self.teardown_terminal()?;
+
+                // Run the external process
+                let result = command.status();
+
+                // Re-setup terminal after process completes
+                self.setup_terminal()?;
+
+                // Force a full redraw by clearing the last view
+                self.last_view.clear();
+
+                // Call the callback with the result
+                let msg = on_exit(result);
+                if let Some(next_cmd) = self.model.update(msg) {
+                    self.process_command_with_ticks(next_cmd, pending_ticks)
+                } else {
+                    Ok(false)
+                }
             }
         }
     }
@@ -553,5 +686,95 @@ mod tests {
         let options = ProgramOptions::inline();
         assert!(!options.alt_screen);
         assert!(!options.mouse);
+    }
+
+    #[test]
+    fn test_program_builder_pattern() {
+        let model = TestModel { count: 0 };
+        let program = Program::new(model)
+            .with_alt_screen()
+            .with_mouse()
+            .with_fps(30)
+            .with_bracketed_paste()
+            .with_focus_change()
+            .with_reduce_motion()
+            .with_tick_rate(Duration::from_millis(50));
+
+        assert!(program.options.alt_screen);
+        assert!(program.options.mouse);
+        assert_eq!(program.options.fps, 30);
+        assert!(program.options.bracketed_paste);
+        assert!(program.options.focus_change);
+        assert!(program.options.reduce_motion);
+        assert_eq!(program.options.tick_rate, Duration::from_millis(50));
+    }
+
+    #[test]
+    fn test_fps_clamping() {
+        let model = TestModel { count: 0 };
+
+        let program = Program::new(model).with_fps(0);
+        assert_eq!(program.options.fps, 1);
+
+        let model = TestModel { count: 0 };
+        let program = Program::new(model).with_fps(200);
+        assert_eq!(program.options.fps, 120);
+    }
+
+    #[test]
+    fn test_message_filter() {
+        let model = TestModel { count: 0 };
+
+        // Test that filter is None by default
+        let program = Program::new(model);
+        assert!(program.filter.is_none());
+
+        // Test that filter can be set
+        let model = TestModel { count: 0 };
+        let program = Program::new(model).with_filter(|_model, msg| {
+            // Pass all messages through
+            Some(msg)
+        });
+        assert!(program.filter.is_some());
+    }
+
+    #[test]
+    fn test_apply_filter_pass_through() {
+        let model = TestModel { count: 0 };
+        let program = Program::new(model).with_filter(|_model, msg| Some(msg));
+
+        // Filter should pass the message through
+        let result = program.apply_filter(TestMsg::Inc);
+        assert!(matches!(result, Some(TestMsg::Inc)));
+    }
+
+    #[test]
+    fn test_apply_filter_block() {
+        let model = TestModel { count: 0 };
+        let program = Program::new(model).with_filter(|_model, _msg| {
+            // Block all messages
+            None
+        });
+
+        // Filter should block the message
+        let result = program.apply_filter(TestMsg::Inc);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_run_process_command() {
+        use std::process::Command;
+
+        // Just verify we can create a run_process command
+        let mut cmd = Command::new("echo");
+        cmd.arg("test");
+
+        let _cmd: Cmd<TestMsg> = Cmd::run_process(cmd, |result| {
+            if result.map(|s| s.success()).unwrap_or(false) {
+                TestMsg::Inc
+            } else {
+                TestMsg::Quit
+            }
+        });
     }
 }

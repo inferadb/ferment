@@ -150,7 +150,11 @@ pub fn join_horizontal_with(pos: Position, strs: &[&str]) -> String {
         .collect();
 
     // Find the maximum height
-    let max_height = blocks.iter().map(|(lines, _)| lines.len()).max().unwrap_or(0);
+    let max_height = blocks
+        .iter()
+        .map(|(lines, _)| lines.len())
+        .max()
+        .unwrap_or(0);
 
     if max_height == 0 {
         return String::new();
@@ -262,12 +266,7 @@ pub fn join_vertical_with(pos: Position, strs: &[&str]) -> String {
                     Position::Center => {
                         let left = padding / 2;
                         let right = padding - left;
-                        result.push(format!(
-                            "{}{}{}",
-                            " ".repeat(left),
-                            line,
-                            " ".repeat(right)
-                        ));
+                        result.push(format!("{}{}{}", " ".repeat(left), line, " ".repeat(right)));
                     }
                     Position::Bottom => {
                         // Right align
@@ -378,7 +377,11 @@ pub fn place(
 /// Place a string horizontally within a given width.
 pub fn place_horizontal(target_width: usize, pos: Position, content: &str) -> String {
     let (_, content_height) = size(content);
-    let target_height = if content_height == 0 { 1 } else { content_height };
+    let target_height = if content_height == 0 {
+        1
+    } else {
+        content_height
+    };
     place(target_width, target_height, pos, Position::Top, content)
 }
 

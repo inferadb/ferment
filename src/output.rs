@@ -236,10 +236,7 @@ mod tests {
     fn test_strip_ansi() {
         assert_eq!(strip_ansi("\x1b[32mgreen\x1b[0m"), "green");
         assert_eq!(strip_ansi("no colors"), "no colors");
-        assert_eq!(
-            strip_ansi("\x1b[1m\x1b[31mbold red\x1b[0m"),
-            "bold red"
-        );
+        assert_eq!(strip_ansi("\x1b[1m\x1b[31mbold red\x1b[0m"), "bold red");
     }
 
     #[test]

@@ -6,8 +6,20 @@ use super::field::FieldValue;
 use super::group::{Group, GroupMsg};
 use crate::runtime::accessible::Accessible;
 use crate::runtime::{Cmd, Model};
-use crate::style::Color;
+use crate::style::{join_horizontal_with, Color, Position};
 use crate::terminal::{Event, KeyCode};
+
+/// Form layout options.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FormLayout {
+    /// Show one group at a time (default).
+    #[default]
+    Default,
+    /// Show all groups stacked vertically.
+    Stack,
+    /// Show groups in columns.
+    Columns(usize),
+}
 
 /// Form results containing all field values.
 #[derive(Debug, Clone, Default)]
@@ -77,6 +89,7 @@ pub struct Form {
     submitted: bool,
     cancelled: bool,
     accessible: bool,
+    layout: FormLayout,
 }
 
 impl Default for Form {
@@ -96,6 +109,7 @@ impl Form {
             submitted: false,
             cancelled: false,
             accessible: std::env::var("ACCESSIBLE").is_ok(),
+            layout: FormLayout::Default,
         }
     }
 
@@ -121,6 +135,21 @@ impl Form {
     pub fn accessible(mut self, accessible: bool) -> Self {
         self.accessible = accessible;
         self
+    }
+
+    /// Set the form layout.
+    ///
+    /// - `FormLayout::Default` - Show one group at a time (default)
+    /// - `FormLayout::Stack` - Show all groups stacked vertically
+    /// - `FormLayout::Columns(n)` - Show groups in n columns
+    pub fn layout(mut self, layout: FormLayout) -> Self {
+        self.layout = layout;
+        self
+    }
+
+    /// Get the current layout.
+    pub fn get_layout(&self) -> FormLayout {
+        self.layout
     }
 
     /// Check if the form is submitted.
@@ -289,20 +318,52 @@ impl Model for Form {
             output.push('\n');
         }
 
-        // Current group
-        if let Some(group) = self.groups.get(self.current_group) {
-            output.push_str(&group.view());
-        }
+        // Render groups based on layout
+        match self.layout {
+            FormLayout::Default => {
+                // Show one group at a time
+                if let Some(group) = self.groups.get(self.current_group) {
+                    output.push_str(&group.view());
+                }
 
-        // Group progress (if multiple groups)
-        if self.groups.len() > 1 {
-            output.push_str(&format!(
-                "\n{}Page {}/{}{}",
-                Color::BrightBlack.to_ansi_fg(),
-                self.current_group + 1,
-                self.groups.len(),
-                "\x1b[0m"
-            ));
+                // Group progress (if multiple groups)
+                if self.groups.len() > 1 {
+                    output.push_str(&format!(
+                        "\n{}Page {}/{}{}",
+                        Color::BrightBlack.to_ansi_fg(),
+                        self.current_group + 1,
+                        self.groups.len(),
+                        "\x1b[0m"
+                    ));
+                }
+            }
+            FormLayout::Stack => {
+                // Show all groups stacked vertically
+                for (i, group) in self.groups.iter().enumerate() {
+                    if i > 0 {
+                        output.push_str("\n\n");
+                    }
+                    output.push_str(&group.view());
+                }
+            }
+            FormLayout::Columns(cols) => {
+                // Show groups in columns
+                let cols = cols.max(1);
+                let group_views: Vec<String> = self.groups.iter().map(|g| g.view()).collect();
+
+                for chunk in group_views.chunks(cols) {
+                    let strs: Vec<&str> = chunk.iter().map(|s| s.as_str()).collect();
+                    if !strs.is_empty() {
+                        if !output.is_empty()
+                            && !output.ends_with('\n')
+                            && !output.ends_with("\n\n")
+                        {
+                            output.push_str("\n\n");
+                        }
+                        output.push_str(&join_horizontal_with(Position::Top, &strs));
+                    }
+                }
+            }
         }
 
         output
@@ -350,6 +411,7 @@ impl Form {
                     }
                     FieldValue::StringList(list) => list.join(", "),
                     FieldValue::Int(n) => n.to_string(),
+                    FieldValue::Path(p) => p.display().to_string(),
                     FieldValue::None => "(empty)".to_string(),
                 };
 
@@ -499,5 +561,105 @@ mod tests {
 
         assert_eq!(results.get_string("name"), Some("Alice"));
         assert_eq!(results.get_bool("agree"), Some(true));
+    }
+
+    #[test]
+    fn test_form_layout_default() {
+        let form = Form::new()
+            .layout(FormLayout::Default)
+            .group(Group::new().field(InputField::new("a").build()))
+            .group(Group::new().field(InputField::new("b").build()));
+
+        assert_eq!(form.get_layout(), FormLayout::Default);
+    }
+
+    #[test]
+    fn test_form_layout_stack() {
+        let form = Form::new()
+            .layout(FormLayout::Stack)
+            .group(Group::new().field(InputField::new("a").build()))
+            .group(Group::new().field(InputField::new("b").build()));
+
+        assert_eq!(form.get_layout(), FormLayout::Stack);
+        // In Stack mode, view should contain content from all groups
+        let view = form.view();
+        assert!(!view.is_empty());
+    }
+
+    #[test]
+    fn test_form_layout_columns() {
+        let form = Form::new()
+            .layout(FormLayout::Columns(2))
+            .group(Group::new().field(InputField::new("a").build()))
+            .group(Group::new().field(InputField::new("b").build()));
+
+        assert_eq!(form.get_layout(), FormLayout::Columns(2));
+    }
+
+    #[test]
+    fn test_note_field() {
+        use crate::forms::NoteField;
+
+        let note_field = NoteField::new("This is an important note!")
+            .title("Notice")
+            .build();
+
+        // Notes should not produce a value
+        assert!(matches!(note_field.value(), FieldValue::None));
+        // Notes start unsubmitted
+        assert!(!note_field.is_submitted());
+    }
+
+    #[test]
+    fn test_dynamic_title() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        let counter = Arc::new(AtomicUsize::new(0));
+        let counter_clone = counter.clone();
+
+        let field = InputField::new("test")
+            .title_fn(move || format!("Attempt {}", counter_clone.load(Ordering::SeqCst)))
+            .build();
+
+        // Initial title should be "Attempt 0"
+        assert_eq!(field.get_title(), "Attempt 0");
+
+        // Update counter and check title updates
+        counter.store(5, Ordering::SeqCst);
+        assert_eq!(field.get_title(), "Attempt 5");
+    }
+
+    #[test]
+    fn test_dynamic_description() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        let show_hint = Arc::new(AtomicBool::new(false));
+        let show_hint_clone = show_hint.clone();
+
+        let field = InputField::new("password")
+            .title("Password")
+            .description_fn(move || {
+                if show_hint_clone.load(Ordering::SeqCst) {
+                    "Hint: It's your birthday!".to_string()
+                } else {
+                    "Enter your password".to_string()
+                }
+            })
+            .build();
+
+        // Initially no hint
+        assert_eq!(
+            field.get_description(),
+            Some("Enter your password".to_string())
+        );
+
+        // Show hint
+        show_hint.store(true, Ordering::SeqCst);
+        assert_eq!(
+            field.get_description(),
+            Some("Hint: It's your birthday!".to_string())
+        );
     }
 }

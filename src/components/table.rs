@@ -46,6 +46,8 @@ pub struct Column {
     pub width: usize,
     /// Text alignment.
     pub align: Align,
+    /// Whether this column should grow to fill remaining space.
+    pub grow: bool,
 }
 
 impl Column {
@@ -55,6 +57,7 @@ impl Column {
             title: title.into(),
             width: 0,
             align: Align::Left,
+            grow: false,
         }
     }
 
@@ -67,6 +70,15 @@ impl Column {
     /// Set the column alignment.
     pub fn align(mut self, align: Align) -> Self {
         self.align = align;
+        self
+    }
+
+    /// Mark this column as the growth column.
+    ///
+    /// The growth column will expand to fill any remaining horizontal space
+    /// after all other columns have been sized.
+    pub fn grow(mut self) -> Self {
+        self.grow = true;
         self
     }
 }
@@ -109,6 +121,10 @@ pub struct Table {
     cursor_col: usize,
     offset: usize,
     height: usize,
+    /// Maximum width for the table (0 = unlimited).
+    width: usize,
+    /// Horizontal scroll offset for wide tables.
+    h_scroll_offset: usize,
     focused: bool,
     submitted: bool,
     cancelled: bool,
@@ -132,6 +148,8 @@ impl Default for Table {
             cursor_col: 0,
             offset: 0,
             height: 10,
+            width: 0,
+            h_scroll_offset: 0,
             focused: true,
             submitted: false,
             cancelled: false,
@@ -177,6 +195,24 @@ impl Table {
     /// Set the visible height (number of rows).
     pub fn height(mut self, height: usize) -> Self {
         self.height = height;
+        self
+    }
+
+    /// Set the maximum width for the table.
+    ///
+    /// When set, rows will be clipped or scrolled horizontally to fit.
+    /// Use 0 (default) for unlimited width.
+    pub fn width(mut self, width: usize) -> Self {
+        self.width = width;
+        self
+    }
+
+    /// Set the horizontal scroll offset.
+    ///
+    /// This determines how many characters of the table content are hidden
+    /// on the left side when the table is wider than the available width.
+    pub fn with_h_scroll_offset(mut self, offset: usize) -> Self {
+        self.h_scroll_offset = offset;
         self
     }
 
@@ -234,6 +270,18 @@ impl Table {
     /// making it suitable for non-interactive CLI output.
     pub fn focused(mut self, focused: bool) -> Self {
         self.focused = focused;
+        self
+    }
+
+    /// Set the initial cursor row position.
+    pub fn with_cursor_row(mut self, row: usize) -> Self {
+        self.cursor_row = row;
+        self
+    }
+
+    /// Set the scroll offset.
+    pub fn with_offset(mut self, offset: usize) -> Self {
+        self.offset = offset;
         self
     }
 
@@ -404,8 +452,12 @@ impl Table {
     }
 
     /// Calculate column widths (auto-size if width is 0).
+    ///
+    /// If a column is marked as `grow`, it will expand to fill remaining space.
     fn calculate_widths(&self) -> Vec<usize> {
-        self.columns
+        // First pass: calculate base widths for all columns
+        let mut widths: Vec<usize> = self
+            .columns
             .iter()
             .enumerate()
             .map(|(col_idx, col)| {
@@ -424,7 +476,28 @@ impl Table {
                     header_len.max(max_data_len).max(3) // Minimum 3 chars
                 }
             })
-            .collect()
+            .collect();
+
+        // If we have a table width and a growth column, expand it
+        if self.width > 0 {
+            if let Some(grow_idx) = self.columns.iter().position(|c| c.grow) {
+                // Calculate current total width
+                // Each column has: space + content + space (2 chars padding per column)
+                let padding_per_col = 2;
+                let current_width: usize =
+                    widths.iter().sum::<usize>() + widths.len() * padding_per_col;
+
+                // Calculate remaining space
+                let remaining = self.width.saturating_sub(current_width);
+
+                // Add remaining space to growth column
+                if remaining > 0 {
+                    widths[grow_idx] += remaining;
+                }
+            }
+        }
+
+        widths
     }
 
     /// Align text within a width.
@@ -458,6 +531,102 @@ impl Table {
         line.push_str(right);
         line.push_str("\x1b[0m");
         line
+    }
+
+    /// Calculate the total content width of the table.
+    fn calculate_content_width(&self, widths: &[usize]) -> usize {
+        if widths.is_empty() {
+            return 0;
+        }
+
+        if self.show_borders {
+            // │ cell1 │ cell2 │ ... │
+            // Each cell has +3 (space before, after, and border)
+            // Plus 1 for leading border
+            widths.len() + widths.iter().sum::<usize>() + widths.len() * 2
+        } else {
+            // " cell1  cell2  ... " (space around each cell)
+            widths.iter().sum::<usize>() + widths.len() * 2
+        }
+    }
+
+    /// Get the total content width of the table.
+    ///
+    /// This is useful for determining if horizontal scrolling is needed.
+    pub fn content_width(&self) -> usize {
+        let widths = self.calculate_widths();
+        self.calculate_content_width(&widths)
+    }
+
+    /// Apply horizontal scroll to a line of text.
+    ///
+    /// Strips ANSI codes for width calculation, applies scroll offset,
+    /// then clips to max width.
+    fn apply_h_scroll(&self, line: &str, max_width: usize) -> String {
+        if max_width == 0 && self.h_scroll_offset == 0 {
+            return line.to_string();
+        }
+
+        // We need to handle ANSI escape codes properly
+        // Strategy: render the full line, then slice by visible characters
+        let mut result = String::new();
+        let mut visible_pos = 0;
+        let mut in_escape = false;
+        let mut escape_seq = String::new();
+        let mut active_style = String::new();
+
+        let target_start = self.h_scroll_offset;
+        let target_end = if max_width > 0 {
+            self.h_scroll_offset + max_width
+        } else {
+            usize::MAX
+        };
+
+        for ch in line.chars() {
+            if in_escape {
+                escape_seq.push(ch);
+                if ch == 'm' {
+                    in_escape = false;
+                    // Track active style for restoration after scroll
+                    if escape_seq.contains("\x1b[0m") {
+                        active_style.clear();
+                    } else {
+                        active_style = escape_seq.clone();
+                    }
+                    // Always include escape sequences in output if we're in visible range
+                    if visible_pos >= target_start && visible_pos < target_end {
+                        result.push_str(&escape_seq);
+                    }
+                    escape_seq.clear();
+                }
+            } else if ch == '\x1b' {
+                in_escape = true;
+                escape_seq.push(ch);
+            } else {
+                // Visible character
+                if visible_pos >= target_start && visible_pos < target_end {
+                    // If this is the first visible character and we have an active style,
+                    // apply it
+                    if visible_pos == target_start && !active_style.is_empty() && result.is_empty()
+                    {
+                        result.push_str(&active_style);
+                    }
+                    result.push(ch);
+                }
+                visible_pos += 1;
+
+                if visible_pos >= target_end {
+                    break;
+                }
+            }
+        }
+
+        // Always reset at the end if we output anything
+        if !result.is_empty() && !result.ends_with("\x1b[0m") {
+            result.push_str("\x1b[0m");
+        }
+
+        result
     }
 }
 
@@ -500,35 +669,55 @@ impl Model for Table {
         }
 
         let widths = self.calculate_widths();
+        let effective_width = if self.width > 0 { self.width } else { 0 };
+        let needs_scroll = effective_width > 0 || self.h_scroll_offset > 0;
         let mut output = String::new();
 
         // Top border
         if self.show_borders {
-            output.push_str(&self.render_border(&widths, "┌", "┬", "┐"));
+            let border = self.render_border(&widths, "┌", "┬", "┐");
+            if needs_scroll {
+                output.push_str(&self.apply_h_scroll(&border, effective_width));
+            } else {
+                output.push_str(&border);
+            }
             output.push('\n');
         }
 
         // Header row
         if self.show_header {
-            output.push_str(&format!("{}│{}", self.border_color.to_ansi_fg(), "\x1b[0m"));
+            let mut header_line = String::new();
+            if self.show_borders {
+                header_line.push_str(&format!("{}│{}", self.border_color.to_ansi_fg(), "\x1b[0m"));
+            }
 
             for (i, col) in self.columns.iter().enumerate() {
                 let text = self.align_text(&col.title, widths[i], col.align);
-                output.push_str(&format!(
+                header_line.push_str(&format!(
                     "{}\x1b[1m {} {}\x1b[0m",
                     self.header_color.to_ansi_fg(),
                     text,
                     "\x1b[0m"
                 ));
                 if self.show_borders {
-                    output.push_str(&format!("{}│{}", self.border_color.to_ansi_fg(), "\x1b[0m"));
+                    header_line.push_str(&format!("{}│{}", self.border_color.to_ansi_fg(), "\x1b[0m"));
                 }
+            }
+            if needs_scroll {
+                output.push_str(&self.apply_h_scroll(&header_line, effective_width));
+            } else {
+                output.push_str(&header_line);
             }
             output.push('\n');
 
             // Header separator
             if self.show_borders {
-                output.push_str(&self.render_border(&widths, "├", "┼", "┤"));
+                let sep = self.render_border(&widths, "├", "┼", "┤");
+                if needs_scroll {
+                    output.push_str(&self.apply_h_scroll(&sep, effective_width));
+                } else {
+                    output.push_str(&sep);
+                }
                 output.push('\n');
             }
         }
@@ -571,8 +760,10 @@ impl Model for Table {
                     self.row_color.clone()
                 };
 
+                let mut row_line = String::new();
+
                 if self.show_borders {
-                    output.push_str(&format!("{}│{}", self.border_color.to_ansi_fg(), "\x1b[0m"));
+                    row_line.push_str(&format!("{}│{}", self.border_color.to_ansi_fg(), "\x1b[0m"));
                 }
 
                 for (col_idx, col) in self.columns.iter().enumerate() {
@@ -589,14 +780,14 @@ impl Model for Table {
                     };
 
                     if is_selected_row {
-                        output.push_str(&format!(
+                        row_line.push_str(&format!(
                             "{}\x1b[7m {} \x1b[27m{}",
                             cell_color.to_ansi_fg(),
                             text,
                             "\x1b[0m"
                         ));
                     } else {
-                        output.push_str(&format!(
+                        row_line.push_str(&format!(
                             "{} {} {}",
                             cell_color.to_ansi_fg(),
                             text,
@@ -605,12 +796,19 @@ impl Model for Table {
                     }
 
                     if self.show_borders {
-                        output.push_str(&format!(
+                        row_line.push_str(&format!(
                             "{}│{}",
                             self.border_color.to_ansi_fg(),
                             "\x1b[0m"
                         ));
                     }
+                }
+
+                // Apply horizontal scroll to the row and pad to width if needed
+                if needs_scroll {
+                    output.push_str(&self.apply_h_scroll(&row_line, effective_width));
+                } else {
+                    output.push_str(&row_line);
                 }
 
                 if view_idx < (end - start - 1) || self.show_borders {
@@ -632,7 +830,12 @@ impl Model for Table {
                 ));
             } else if self.show_borders {
                 // Bottom border (only if no scroll indicator)
-                output.push_str(&self.render_border(&widths, "└", "┴", "┘"));
+                let border = self.render_border(&widths, "└", "┴", "┘");
+                if needs_scroll {
+                    output.push_str(&self.apply_h_scroll(&border, effective_width));
+                } else {
+                    output.push_str(&border);
+                }
             }
         }
 

@@ -822,7 +822,11 @@ impl Style {
                 },
                 if border.left { &border_style_end } else { "" },
                 padded,
-                if border.right { &border_style_start } else { "" },
+                if border.right {
+                    &border_style_start
+                } else {
+                    ""
+                },
                 if border.right {
                     chars.right.to_string()
                 } else {
@@ -886,11 +890,7 @@ impl Style {
 
         // Content with left/right margin
         for line in &lines {
-            result.push(format!(
-                "{}{}",
-                " ".repeat(self.margin.left),
-                line,
-            ));
+            result.push(format!("{}{}", " ".repeat(self.margin.left), line,));
         }
 
         // Bottom margin

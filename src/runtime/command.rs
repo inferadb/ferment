@@ -5,6 +5,7 @@
 
 use std::future::Future;
 use std::pin::Pin;
+use std::process::Command as ProcessCommand;
 use std::time::{Duration, Instant};
 
 /// A command representing an IO operation that produces a message.
@@ -52,6 +53,11 @@ enum CmdInner<M> {
     Sequence(Vec<Cmd<M>>),
     /// An async action
     Async(Pin<Box<dyn Future<Output = M> + Send>>),
+    /// Run an external process (suspends the TUI)
+    RunProcess {
+        command: ProcessCommand,
+        on_exit: Box<dyn FnOnce(std::io::Result<std::process::ExitStatus>) -> M + Send>,
+    },
 }
 
 impl<M> Cmd<M> {
@@ -161,6 +167,41 @@ impl<M> Cmd<M> {
         }
     }
 
+    /// Run an external process, suspending the TUI.
+    ///
+    /// This command temporarily exits the TUI, runs the specified process,
+    /// waits for it to complete, and then restores the TUI. The provided
+    /// function receives the process exit status.
+    ///
+    /// This is useful for launching editors, pagers, or other interactive
+    /// programs that need full terminal control.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use ferment::Cmd;
+    /// use std::process::Command;
+    ///
+    /// enum Msg { EditorClosed(bool) }
+    ///
+    /// // Open a file in the user's default editor
+    /// let cmd: Cmd<Msg> = Cmd::run_process(
+    ///     Command::new("vim").arg("file.txt"),
+    ///     |result| Msg::EditorClosed(result.map(|s| s.success()).unwrap_or(false))
+    /// );
+    /// ```
+    pub fn run_process<F>(command: ProcessCommand, on_exit: F) -> Self
+    where
+        F: FnOnce(std::io::Result<std::process::ExitStatus>) -> M + Send + 'static,
+    {
+        Self {
+            inner: CmdInner::RunProcess {
+                command,
+                on_exit: Box::new(on_exit),
+            },
+        }
+    }
+
     /// Batch multiple commands to run concurrently.
     ///
     /// All commands execute simultaneously with no ordering guarantees.
@@ -246,6 +287,10 @@ impl<M> Cmd<M> {
                 let f = f.clone();
                 Cmd::perform_async(async move { f(future.await) })
             }
+            CmdInner::RunProcess { command, on_exit } => {
+                let f = f.clone();
+                Cmd::run_process(command, move |result| f(on_exit(result)))
+            }
         }
     }
 
@@ -271,6 +316,7 @@ impl<M> Cmd<M> {
             CmdInner::Batch(cmds) => CmdResult::Batch(cmds),
             CmdInner::Sequence(cmds) => CmdResult::Sequence(cmds),
             CmdInner::Async(future) => CmdResult::Async(future),
+            CmdInner::RunProcess { command, on_exit } => CmdResult::RunProcess { command, on_exit },
         }
     }
 }
@@ -291,6 +337,7 @@ impl<M> std::fmt::Debug for Cmd<M> {
             CmdInner::Batch(cmds) => write!(f, "Cmd::Batch({} cmds)", cmds.len()),
             CmdInner::Sequence(cmds) => write!(f, "Cmd::Sequence({} cmds)", cmds.len()),
             CmdInner::Async(_) => write!(f, "Cmd::Async(...)"),
+            CmdInner::RunProcess { .. } => write!(f, "Cmd::RunProcess(...)"),
         }
     }
 }
@@ -307,4 +354,131 @@ pub(crate) enum CmdResult<M> {
     Batch(Vec<Cmd<M>>),
     Sequence(Vec<Cmd<M>>),
     Async(Pin<Box<dyn Future<Output = M> + Send>>),
+    RunProcess {
+        command: ProcessCommand,
+        on_exit: Box<dyn FnOnce(std::io::Result<std::process::ExitStatus>) -> M + Send>,
+    },
+}
+
+// ============================================================================
+// Module-level command functions (Bubble Tea style)
+// ============================================================================
+
+/// Create a no-op command.
+///
+/// Module-level function equivalent to `Cmd::none()`.
+///
+/// # Example
+///
+/// ```rust
+/// use ferment::cmd;
+///
+/// enum Msg { Done }
+///
+/// let cmd: ferment::Cmd<Msg> = cmd::none();
+/// ```
+pub fn none<M>() -> Cmd<M> {
+    Cmd::none()
+}
+
+/// Create a command to quit the program.
+///
+/// Module-level function equivalent to `Cmd::quit()`.
+///
+/// # Example
+///
+/// ```rust
+/// use ferment::cmd;
+///
+/// enum Msg { Quit }
+///
+/// let cmd: ferment::Cmd<Msg> = cmd::quit();
+/// ```
+pub fn quit<M>() -> Cmd<M> {
+    Cmd::quit()
+}
+
+/// Batch multiple commands to run concurrently.
+///
+/// Module-level function equivalent to `Cmd::batch()`.
+///
+/// # Example
+///
+/// ```rust
+/// use ferment::cmd;
+///
+/// enum Msg { A, B }
+///
+/// let cmd: ferment::Cmd<Msg> = cmd::batch(vec![
+///     cmd::none(),
+///     cmd::quit(),
+/// ]);
+/// ```
+pub fn batch<M>(cmds: Vec<Cmd<M>>) -> Cmd<M> {
+    Cmd::batch(cmds)
+}
+
+/// Sequence commands to run in order.
+///
+/// Module-level function equivalent to `Cmd::sequence()`.
+///
+/// # Example
+///
+/// ```rust
+/// use ferment::cmd;
+///
+/// enum Msg { First, Second }
+///
+/// let cmd: ferment::Cmd<Msg> = cmd::sequence(vec![
+///     cmd::none(),
+///     cmd::quit(),
+/// ]);
+/// ```
+pub fn sequence<M>(cmds: Vec<Cmd<M>>) -> Cmd<M> {
+    Cmd::sequence(cmds)
+}
+
+/// Create a tick command that fires after a duration.
+///
+/// Module-level function equivalent to `Cmd::tick()`.
+///
+/// # Example
+///
+/// ```rust
+/// use ferment::cmd;
+/// use std::time::Duration;
+///
+/// enum Msg { Tick }
+///
+/// let cmd: ferment::Cmd<Msg> = cmd::tick(Duration::from_millis(100), |_| Msg::Tick);
+/// ```
+pub fn tick<M, F>(duration: Duration, msg_fn: F) -> Cmd<M>
+where
+    F: Fn(Instant) -> M + Send + 'static,
+{
+    Cmd::tick(duration, msg_fn)
+}
+
+/// Run an external process, suspending the TUI.
+///
+/// Module-level function equivalent to `Cmd::run_process()`.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use ferment::cmd;
+/// use std::process::Command;
+///
+/// enum Msg { EditorClosed(bool) }
+///
+/// let cmd: ferment::Cmd<Msg> = cmd::run_process(
+///     Command::new("vim").arg("file.txt"),
+///     |result| Msg::EditorClosed(result.map(|s| s.success()).unwrap_or(false))
+/// );
+/// ```
+pub fn run_process<M, F>(command: ProcessCommand, on_exit: F) -> Cmd<M>
+where
+    F: FnOnce(std::io::Result<std::process::ExitStatus>) -> M + Send + 'static,
+{
+    Cmd::run_process(command, on_exit)
 }

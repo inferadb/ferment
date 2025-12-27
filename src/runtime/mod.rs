@@ -8,7 +8,7 @@
 //! - [`Accessible`] - Trait for accessible mode support
 
 pub mod accessible;
-mod command;
+pub mod command;
 mod message;
 mod program;
 mod subscription;
@@ -18,6 +18,25 @@ pub use command::Cmd;
 pub use message::CommonMsg;
 pub use program::{Program, ProgramOptions};
 pub use subscription::Sub;
+
+/// Module-level command functions (Bubble Tea style).
+///
+/// This module provides top-level functions as alternatives to `Cmd::` methods:
+///
+/// ```rust
+/// use ferment::cmd;
+///
+/// enum Msg { Done }
+///
+/// // Instead of Cmd::quit(), you can use:
+/// let quit_cmd: ferment::Cmd<Msg> = cmd::quit();
+///
+/// // Instead of Cmd::batch(), you can use:
+/// let batch_cmd: ferment::Cmd<Msg> = cmd::batch(vec![cmd::none()]);
+/// ```
+pub mod cmd {
+    pub use super::command::{batch, none, quit, run_process, sequence, tick};
+}
 
 use crate::terminal::Event;
 

@@ -147,10 +147,13 @@ pub mod util;
 pub use runtime::{Accessible, AccessibleInput, Cmd, Model, Program, ProgramOptions, Sub};
 pub use terminal::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 
+// Re-export cmd module for Bubble Tea-style function calls
+pub use runtime::cmd;
+
 // Re-export commonly used components
 pub use components::{
-    Column, Confirm, List, MultiProgress, MultiSelect, Progress, Select, Spinner, Table, TextArea,
-    TextInput,
+    AppLayout, BadgeVariant, Column, Confirm, FilePicker, List, MultiProgress, MultiSelect,
+    Progress, Select, Spinner, StatusBadge, Tab, TabBar, Table, TextArea, TextInput,
 };
 
 // Re-export style types
