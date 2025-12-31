@@ -8,7 +8,7 @@ description = "A Rust-native terminal UI framework following the Elm Architectur
 license = "Apache-2.0"
 repository = "https://github.com/inferadb/ferment"
 readme = "README.md"
-keywords = ["tui", "terminal", "elm", "bubble-tea", "cli", "ferment"]
+keywords = ["tui", "terminal", "bubble-tea", "cli", "ferment"]
 categories = ["command-line-interface", "gui"]
 
 [dependencies]
