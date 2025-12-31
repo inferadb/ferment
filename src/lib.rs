@@ -170,4 +170,4 @@ pub use style::{
 pub use forms::{Form, Group};
 
 // Re-export utility types
-pub use util::{ManagedWorker, WorkerHandle};
+pub use util::{ManagedWorker, ScrollState, WorkerHandle};
