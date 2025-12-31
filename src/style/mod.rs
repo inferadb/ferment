@@ -7,6 +7,21 @@
 //! - Width, height, and alignment
 //! - Layout utilities (join, place)
 //! - Style inheritance and composition
+//!
+//! # ANSI Constants
+//!
+//! Common ANSI escape sequences are provided as constants for convenience:
+//!
+//! ```rust
+//! use ferment::style::{RESET, CLEAR_LINE, Color};
+//!
+//! // Use Color for foreground colors
+//! let green = Color::Green.to_ansi_fg();
+//! println!("{}Success!{}", green, RESET);
+//!
+//! // Use CLEAR_LINE for terminal control
+//! eprint!("\r{}Processing...", CLEAR_LINE);
+//! ```
 
 mod border;
 mod color;
@@ -15,6 +30,46 @@ mod text;
 pub use border::{Border, BorderStyle};
 pub use color::{has_dark_background, Color, ColorProfile};
 pub use text::{bold, colored, dim, underline, Position, Spacing, Style};
+
+// ============================================================================
+// ANSI Escape Sequence Constants
+// ============================================================================
+
+/// Reset all attributes (colors, bold, underline, etc.).
+pub const RESET: &str = "\x1b[0m";
+
+/// Clear from cursor to end of line.
+pub const CLEAR_LINE: &str = "\x1b[K";
+
+/// Move cursor up one line.
+pub const CURSOR_UP: &str = "\x1b[1A";
+
+/// Carriage return (move to start of line).
+pub const CR: &str = "\r";
+
+/// Bold text attribute.
+pub const BOLD: &str = "\x1b[1m";
+
+/// Dim text attribute.
+pub const DIM: &str = "\x1b[2m";
+
+/// Italic text attribute.
+pub const ITALIC: &str = "\x1b[3m";
+
+/// Underline text attribute.
+pub const UNDERLINE: &str = "\x1b[4m";
+
+/// Blink text attribute.
+pub const BLINK: &str = "\x1b[5m";
+
+/// Reverse video (swap foreground and background).
+pub const REVERSE: &str = "\x1b[7m";
+
+/// Hidden text attribute.
+pub const HIDDEN: &str = "\x1b[8m";
+
+/// Strikethrough text attribute.
+pub const STRIKETHROUGH: &str = "\x1b[9m";
 
 use unicode_width::UnicodeWidthStr;
 
