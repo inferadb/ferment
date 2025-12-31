@@ -1,0 +1,29 @@
+project_name: "Ferment TUI Framework"
+
+encoding: "utf-8"
+read_only: false
+languages:
+  - rust
+
+initial_prompt: |
+  Ferment - A Rust-native terminal UI framework inspired by Bubble Tea.
+
+  Architecture:
+  - Model-Update-View: Core architecture based on The Elm Architecture
+  - Composable Components: Reusable widgets (spinners, inputs, selectors)
+  - Form System: Declarative form building with validation
+  - CI-Friendly: Automatic non-interactive mode detection
+
+  Key modules:
+  - src/runtime/ - Core runtime, program, commands, subscriptions
+  - src/components/ - UI components (list, select, text_input, spinner, viewport)
+  - src/forms/ - Form system with field validation
+  - src/style/ - Styling (colors, borders, text)
+  - src/terminal/ - Terminal backend and I/O abstraction
+
+  Used by the InferaDB CLI for interactive terminal features.
+
+ignore_all_files_in_gitignore: true
+ignored_paths: []
+excluded_tools: []
+included_optional_tools: []

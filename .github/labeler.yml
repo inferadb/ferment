@@ -1,17 +1,22 @@
+# Labeler configuration
+# See: https://github.com/actions/labeler
+# Labels must match those defined in .github/maintenance/labels.sh
+
 # Documentation
-"kind/documentation":
+area/docs:
   - changed-files:
       - any-glob-to-any-file:
           - "**/*.md"
+          - "docs/**/*"
 
 # CI/CD
-"area/ci":
+area/ci:
   - changed-files:
       - any-glob-to-any-file:
           - ".github/**/*"
 
 # Configuration
-"area/config":
+area/config:
   - changed-files:
       - any-glob-to-any-file:
           - "**/*.toml"
@@ -20,14 +25,14 @@
           - "!.github/**/*"
 
 # Dependencies
-"area/deps":
+area/deps:
   - changed-files:
       - any-glob-to-any-file:
           - "Cargo.toml"
           - "Cargo.lock"
 
 # Testing
-"area/testing":
+area/testing:
   - changed-files:
       - any-glob-to-any-file:
           - "**/tests/**/*"
@@ -35,37 +40,37 @@
           - "**/*_tests.rs"
 
 # Core runtime (program, commands, messages, subscriptions)
-"area/runtime":
+area/runtime:
   - changed-files:
       - any-glob-to-any-file:
           - "src/runtime/**/*"
+          - "src/program/**/*"
+          - "src/cmd/**/*"
+          - "src/sub/**/*"
 
 # Components (list, select, text_input, progress, spinner, viewport, etc.)
-"area/components":
+area/components:
   - changed-files:
       - any-glob-to-any-file:
           - "src/components/**/*"
 
 # Forms (field, validation, group, form)
-"area/forms":
+area/forms:
   - changed-files:
       - any-glob-to-any-file:
           - "src/forms/**/*"
+          - "src/form/**/*"
 
 # Styles (color, border, text)
-"area/style":
+area/style:
   - changed-files:
       - any-glob-to-any-file:
           - "src/style/**/*"
+          - "src/styles/**/*"
 
 # Terminal backend and I/O
-"area/terminal":
+area/terminal:
   - changed-files:
       - any-glob-to-any-file:
           - "src/terminal/**/*"
-
-# Utilities (keys, size)
-"area/util":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "src/util/**/*"
+          - "src/io/**/*"

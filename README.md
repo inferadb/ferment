@@ -1,6 +1,10 @@
-# Ferment
+<div align="center">
+    <p><a href="https://inferadb.com"><img src=".github/inferadb.png" width="100" /></a></p>
+    <h1>Ferment</h1>
+    <p>A Rust Terminal UI framework inspired by [Bubble Tea](https://github.com/charmbracelet/bubbletea)</p>
+</div>
 
-A Rust-native terminal UI framework inspired by [Bubble Tea](https://github.com/charmbracelet/bubbletea).
+<br />
 
 ## Overview
 
