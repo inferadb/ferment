@@ -8,7 +8,7 @@ description = "A Rust-native terminal UI framework following the Elm Architectur
 license = "Apache-2.0"
 repository = "https://github.com/inferadb/teapot"
 readme = "README.md"
-keywords = ["tui", "terminal", "bubble-tea", "cli", "teapot", "elm"]
+keywords = ["tui", "terminal", "cli", "teapot", "elm"]
 categories = ["command-line-interface", "gui"]
 
 [dependencies]
