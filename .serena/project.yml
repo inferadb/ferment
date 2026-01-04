@@ -1,4 +1,4 @@
-project_name: "Ferment TUI Framework"
+project_name: "Teapot TUI Framework"
 
 encoding: "utf-8"
 read_only: false
@@ -6,7 +6,7 @@ languages:
   - rust
 
 initial_prompt: |
-  Ferment - A Rust-native terminal UI framework inspired by Bubble Tea.
+  Teapot - A Rust-native terminal UI framework inspired by Bubble Tea.
 
   Architecture:
   - Model-Update-View: Core architecture based on The Elm Architecture
