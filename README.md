@@ -11,7 +11,7 @@
 > [!IMPORTANT]
 > Under active development. Not production-ready.
 
-`teapot` provides a functional, declarative approach to building terminal user interfaces:
+`teapot` is a functional, declarative TUI framework:
 
 - **Model-Update-View** - Core architecture based on The Elm Architecture
 - **Composable Components** - Reusable widgets like spinners, inputs, and selectors
@@ -84,7 +84,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Text Input
 
-Single-line text input with cursor support, placeholder text, and optional password masking.
+Single-line input with cursor support, placeholders, and password masking.
 
 ```rust
 use teapot::components::TextInput;
@@ -96,7 +96,7 @@ let input = TextInput::new()
 
 ### Text Area
 
-Multi-line text editor with cursor navigation, scrolling, and line editing.
+Multi-line editor with cursor navigation, scrolling, and line editing.
 
 ```rust
 use teapot::components::TextArea;
@@ -109,7 +109,7 @@ let textarea = TextArea::new()
 
 #### External Editor Support
 
-Open content in your preferred editor with `Ctrl+O`:
+Open in an external editor with `Ctrl+O`:
 
 ```rust
 let textarea = TextArea::new()
@@ -172,7 +172,7 @@ let list = List::new("Select a file")
 
 #### Spinner
 
-Animated loading indicator for indeterminate operations.
+Animated indicator for indeterminate operations.
 
 ```rust
 use teapot::components::{Spinner, SpinnerStyle};
@@ -184,7 +184,7 @@ let spinner = Spinner::new()
 
 #### Progress
 
-Progress bar for operations with known completion percentage.
+Progress bar for determinate operations.
 
 ```rust
 use teapot::components::Progress;
@@ -197,7 +197,7 @@ let progress = Progress::new()
 
 #### MultiProgress
 
-Parallel progress bars for tracking multiple concurrent tasks.
+Progress bars for concurrent tasks.
 
 ```rust
 use teapot::components::MultiProgress;
@@ -212,7 +212,7 @@ let mp = MultiProgress::new()
 
 #### Viewport
 
-Scrollable container for long content with keyboard navigation.
+Scrollable container with keyboard navigation.
 
 ```rust
 use teapot::components::Viewport;
@@ -243,7 +243,7 @@ let table = Table::new()
 
 ## Forms
 
-Build multi-step forms with validation, inspired by [Huh](https://github.com/charmbracelet/huh).
+Multi-step forms with validation, inspired by [Huh](https://github.com/charmbracelet/huh).
 
 ### Basic Form
 
@@ -269,12 +269,12 @@ let form = Form::new()
 
 ### Form Layouts
 
-Control how form groups are displayed:
+Form group display options:
 
 ```rust
 use teapot::forms::{Form, FormLayout};
 
-// Default: one group at a time (wizard-style)
+// One group at a time (wizard-style)
 let wizard = Form::new().layout(FormLayout::Default);
 
 // Stack: all groups visible at once
@@ -371,7 +371,7 @@ let dir_picker = FilePicker::new()
 
 ## Styling
 
-Teapot includes a comprehensive styling system inspired by [Lip Gloss](https://github.com/charmbracelet/lipgloss).
+Styling system inspired by [Lip Gloss](https://github.com/charmbracelet/lipgloss).
 
 ### Basic Styling
 
@@ -389,7 +389,7 @@ let styled = Style::new()
 
 ### CSS-like Shorthand
 
-Padding and margin support CSS-style shorthand (1, 2, 3, or 4 values):
+Padding and margin use CSS shorthand (1-4 values):
 
 ```rust
 use teapot::style::Style;
@@ -483,7 +483,7 @@ let plain = highlight.unset_bold().unset_bg();
 
 ### Builder Pattern
 
-Configure the program with a fluent builder API:
+Builder API configuration:
 
 ```rust
 use teapot::{Program, Model};
@@ -501,7 +501,7 @@ Program::new(my_model)
 
 ### Message Filtering
 
-Pre-process or block messages before they reach your update function:
+Pre-process or block messages before update:
 
 ```rust
 Program::new(my_model)
@@ -518,7 +518,7 @@ Program::new(my_model)
 
 ### Commands
 
-The `cmd` module provides Bubble Tea-style command functions:
+Bubble Tea-style commands via the `cmd` module:
 
 ```rust
 use teapot::cmd;
@@ -542,7 +542,7 @@ cmd::none()
 
 ### External Process Execution
 
-Spawn external processes (editors, etc.) with terminal teardown/restore:
+Spawn external processes with terminal teardown/restore:
 
 ```rust
 use teapot::Cmd;
@@ -561,13 +561,13 @@ Cmd::run_process(cmd, |result| {
 
 ## Architecture
 
-The framework follows The Elm Architecture:
+Follows The Elm Architecture:
 
-1. **Model** - Your application state (any Rust struct)
-2. **Message** - Events that trigger state changes
-3. **Update** - Pure function that handles messages and updates state
-4. **View** - Pure function that renders state as a string
-5. **Commands** - Side effects (timers, async operations)
+1. **Model** - Application state
+2. **Message** - Events triggering state changes
+3. **Update** - Handles messages, updates state
+4. **View** - Renders state to string
+5. **Commands** - Side effects (timers, async I/O)
 
 ```mermaid
 flowchart TD
@@ -595,16 +595,16 @@ flowchart TD
 
 ## CI/Script Compatibility
 
-The framework automatically detects non-interactive environments:
+Automatically detects non-interactive environments:
 
-- No animations or spinners
+- No animations
 - Clear error messages
-- Appropriate exit codes
-- Works with piped input/output
+- Proper exit codes
+- Piped I/O support
 
 ## Accessibility
 
-Teapot supports accessible mode for screen reader users and other assistive technologies.
+Accessible mode supports screen readers and assistive technologies.
 
 ### Enabling Accessible Mode
 
@@ -616,10 +616,10 @@ ACCESSIBLE=1 ./my-app
 
 ### What Changes in Accessible Mode
 
-- **Plain text output** - No ANSI escape codes or visual formatting
-- **Numbered options** - Selection components use numbers instead of arrow navigation
-- **Line-based input** - Standard stdin reading instead of raw terminal mode
-- **Clear prompts** - Screen reader-friendly text descriptions
+- **Plain text** - No ANSI codes or formatting
+- **Numbered options** - Numbers replace arrow navigation
+- **Line-based input** - Standard stdin instead of raw mode
+- **Clear prompts** - Screen reader-friendly descriptions
 
 ### Accessible Forms
 
@@ -674,7 +674,7 @@ Form completed!
 
 ### Custom Accessible Components
 
-Components can implement the `Accessible` trait for custom accessible rendering:
+Implement the `Accessible` trait for custom rendering:
 
 ```rust
 use teapot::{Accessible, Model};
@@ -708,7 +708,7 @@ impl Accessible for MyComponent {
 
 ## Community
 
-Join us on [Discord](https://discord.gg/inferadb) to discuss InferaDB, get help with your projects, and connect with other developers. Whether you have questions, want to share what you're building, or are interested in contributing, we'd love to have you!
+Join our [Discord](https://discord.gg/inferadb) to discuss InferaDB, get help, and connect with other developers.
 
 ## License
 
